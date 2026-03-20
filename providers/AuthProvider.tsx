@@ -73,10 +73,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
                     setUser(JSON.parse(storedUser) as AuthUser);
                 }
             } catch {
-                // Corrupted storage — clear and start fresh
-                await SecureStore.deleteItemAsync(TOKEN_KEY);
-                await SecureStore.deleteItemAsync(REFRESH_KEY);
-                await SecureStore.deleteItemAsync(USER_KEY);
+                // Corrupted storage or native module not available — clear and start fresh
+                try {
+                    await SecureStore.deleteItemAsync(TOKEN_KEY);
+                    await SecureStore.deleteItemAsync(REFRESH_KEY);
+                    await SecureStore.deleteItemAsync(USER_KEY);
+                } catch {
+                    // SecureStore not available (e.g. first Expo Go boot) — ignore
+                }
             } finally {
                 setIsLoading(false);
             }
