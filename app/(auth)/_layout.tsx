@@ -25,9 +25,10 @@ export default function AuthLayout() {
     return (
         <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="login" />
-            <Stack.Screen name="register" />
+            <Stack.Screen name="register" options={{ animation: 'fade', animationDuration: 800 }} />
             <Stack.Screen name="doctor-login" />
-            <Stack.Screen name="doctor-register" />
+            <Stack.Screen name="doctor-register" options={{ animation: 'fade', animationDuration: 800 }} />
+            <Stack.Screen name="doctor-onboarding" />
         </Stack>
     );
 }
