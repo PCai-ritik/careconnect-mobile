@@ -102,3 +102,27 @@ When the backend is ready, replace the mock implementation as described in each 
 | **Export** | `mockMedicalRecords: MockMedicalRecord[]` |
 | **Schema** | `{ id, diagnosis, doctorName, date, symptoms, treatment, prescriptions: string[], followUp: string | null }` |
 | **Count** | 3 records |
+
+---
+
+## Doctor Dashboard Data
+
+### Doctor-Facing Appointments
+| Property | Value |
+|----------|-------|
+| **Status** | `[MOCKED]` |
+| **File** | `services/mock-data.ts` |
+| **Export** | `mockDoctorAppointments: DoctorAppointment[]` |
+| **Schema** | `{ id, patientName, time, type: "Video Consultation" | "Follow-up" | "New Patient" | "In-Person", status: "upcoming" | "scheduled" | "completed", avatar: string | null }` |
+| **Count** | 4 appointments (1 upcoming, 3 scheduled) |
+| **Note** | Doctor-facing complement to `MockAppointment` (which is patient-facing and shows doctor info) |
+
+### Doctor-Facing Patient Directory
+| Property | Value |
+|----------|-------|
+| **Status** | `[MOCKED]` |
+| **File** | `services/mock-data.ts` |
+| **Export** | `mockRecentPatients: MockPatient[]` |
+| **Schema** | `{ id, name, condition, lastVisit, avatar: string | null }` |
+| **Count** | 3 patients |
+

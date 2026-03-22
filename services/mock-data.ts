@@ -28,6 +28,7 @@ export type MockDoctor = {
     user_type: 'doctor';
     full_name: string;
     specialization: string;
+    avatar: string;
     verification: {
         hospitalAffiliation: string;
         yearsOfExperience: string;
@@ -67,6 +68,7 @@ export const mockDoctors: MockDoctor[] = [
         user_type: 'doctor',
         full_name: 'Dr. Sarah Johnson',
         specialization: 'General Practice',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Sarah+Johnson&backgroundColor=b6e3f4',
         verification: {
             hospitalAffiliation: 'Cedars-Sinai Medical Center',
             yearsOfExperience: '11-20 years',
@@ -86,6 +88,7 @@ export const mockDoctors: MockDoctor[] = [
         user_type: 'doctor',
         full_name: 'Dr. Michael Chen',
         specialization: 'Cardiology',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Michael+Chen&backgroundColor=c0aede',
         verification: {
             hospitalAffiliation: 'AIIMS Delhi',
             yearsOfExperience: '11-20 years',
@@ -105,6 +108,7 @@ export const mockDoctors: MockDoctor[] = [
         user_type: 'doctor',
         full_name: 'Dr. Sneha Reddy',
         specialization: 'Dermatology',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Sneha+Reddy&backgroundColor=ffd5dc',
         verification: {
             hospitalAffiliation: 'Apollo Hospitals Hyderabad',
             yearsOfExperience: '6-10 years',
@@ -124,6 +128,7 @@ export const mockDoctors: MockDoctor[] = [
         user_type: 'doctor',
         full_name: 'Dr. Rajesh Kumar',
         specialization: 'Orthopedics',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Rajesh+Kumar&backgroundColor=d1f4d9',
         verification: {
             hospitalAffiliation: 'Fortis Hospital Noida',
             yearsOfExperience: '20+ years',
@@ -143,6 +148,7 @@ export const mockDoctors: MockDoctor[] = [
         user_type: 'doctor',
         full_name: 'Dr. Lisa Anderson',
         specialization: 'Pediatrics',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Lisa+Anderson&backgroundColor=ffdfbf',
         verification: {
             hospitalAffiliation: 'Rainbow Children\'s Hospital',
             yearsOfExperience: '11-20 years',
@@ -162,6 +168,7 @@ export const mockDoctors: MockDoctor[] = [
         user_type: 'doctor',
         full_name: 'Dr. Robert Williams',
         specialization: 'Neurology',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Robert+Williams&backgroundColor=b6e3f4',
         verification: {
             hospitalAffiliation: 'Max Super Speciality Hospital',
             yearsOfExperience: '11-20 years',
@@ -181,6 +188,7 @@ export const mockDoctors: MockDoctor[] = [
         user_type: 'doctor',
         full_name: 'Dr. Priya Sharma',
         specialization: 'Cardiology',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Priya+Sharma&backgroundColor=c0aede',
         verification: {
             hospitalAffiliation: 'Medanta The Medicity',
             yearsOfExperience: '6-10 years',
@@ -200,6 +208,7 @@ export const mockDoctors: MockDoctor[] = [
         user_type: 'doctor',
         full_name: 'Dr. Amit Patel',
         specialization: 'General Practice',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Amit+Patel&backgroundColor=d1f4d9',
         verification: {
             hospitalAffiliation: 'Doon Medical College & Hospital',
             yearsOfExperience: '3-5 years',
@@ -312,3 +321,86 @@ export const mockPostCallSummary = {
     followUp: 'In 7 days if symptoms persist.',
     doctorNotes: 'Patient was advised to avoid cold beverages and monitor temperature daily.',
 };
+
+// ─── Doctor-Facing Appointments ─────────────────────────────────────────────
+// Shows patient info from the doctor's perspective (vs MockAppointment which
+// is patient-facing and shows doctor info).
+
+export type DoctorAppointment = {
+    id: string;
+    patientName: string;
+    time: string;
+    type: 'Video Consultation' | 'Follow-up' | 'New Patient' | 'In-Person';
+    status: 'upcoming' | 'scheduled' | 'completed';
+    avatar: string;
+};
+
+export const mockDoctorAppointments: DoctorAppointment[] = [
+    {
+        id: 'dappt-001',
+        patientName: 'Ananya Gupta',
+        time: '9:00 AM',
+        type: 'Video Consultation',
+        status: 'upcoming',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Ananya+Gupta&backgroundColor=ffd5dc',
+    },
+    {
+        id: 'dappt-002',
+        patientName: 'Rahul Verma',
+        time: '10:30 AM',
+        type: 'Follow-up',
+        status: 'scheduled',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Rahul+Verma&backgroundColor=b6e3f4',
+    },
+    {
+        id: 'dappt-003',
+        patientName: 'Meera Iyer',
+        time: '11:45 AM',
+        type: 'New Patient',
+        status: 'scheduled',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Meera+Iyer&backgroundColor=c0aede',
+    },
+    {
+        id: 'dappt-004',
+        patientName: 'Siddharth Rao',
+        time: '2:00 PM',
+        type: 'Video Consultation',
+        status: 'scheduled',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Siddharth+Rao&backgroundColor=d1f4d9',
+    },
+];
+
+// ─── Doctor-Facing Patient Directory ────────────────────────────────────────
+
+export type MockPatient = {
+    id: string;
+    name: string;
+    condition: string;
+    lastVisit: string;
+    avatar: string;
+};
+
+export const mockRecentPatients: MockPatient[] = [
+    {
+        id: 'pt-001',
+        name: 'Ananya Gupta',
+        condition: 'Hypertension',
+        lastVisit: '2 days ago',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Ananya+Gupta&backgroundColor=ffd5dc',
+    },
+    {
+        id: 'pt-002',
+        name: 'Rahul Verma',
+        condition: 'Type 2 Diabetes',
+        lastVisit: '5 days ago',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Rahul+Verma&backgroundColor=b6e3f4',
+    },
+    {
+        id: 'pt-003',
+        name: 'Meera Iyer',
+        condition: 'Anxiety Disorder',
+        lastVisit: '1 week ago',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Meera+Iyer&backgroundColor=c0aede',
+    },
+];
+
