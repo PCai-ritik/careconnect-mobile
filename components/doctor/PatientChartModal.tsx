@@ -17,7 +17,10 @@ import {
     ScrollView,
     StyleSheet,
     Dimensions,
+    Animated,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import useSwipeDown from '@/hooks/useSwipeDown';
 import { Feather } from '@expo/vector-icons';
 import {
     spacing,
@@ -379,6 +382,8 @@ function MedicationsTab() {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function PatientChartModal({ visible, patient, onClose, onNewPrescription }: PatientChartModalProps) {
+    const insets = useSafeAreaInsets();
+    const { panHandlers, animatedStyle } = useSwipeDown(onClose);
     const [activeTab, setActiveTab] = useState<TabId>('history');
 
     if (!patient) return null;
@@ -396,9 +401,9 @@ export default function PatientChartModal({ visible, patient, onClose, onNewPres
             <Pressable style={s.backdrop} onPress={onClose} />
 
             {/* Sheet */}
-            <View style={s.sheet}>
+            <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom }]}>
                 {/* Handle */}
-                <View style={s.handleRow}>
+                <View style={s.handleRow} {...panHandlers}>
                     <View style={s.handle} />
                 </View>
 
@@ -415,16 +420,6 @@ export default function PatientChartModal({ visible, patient, onClose, onNewPres
                             </Text>
                         </View>
                     </View>
-                    <Pressable
-                        onPress={onClose}
-                        hitSlop={12}
-                        style={({ pressed }) => [
-                            s.closeBtn,
-                            pressed && { opacity: 0.5 },
-                        ]}
-                    >
-                        <Feather name="x" size={20} color={doctorColors.textMuted} />
-                    </Pressable>
                 </View>
 
                 {/* Tab Bar */}
@@ -483,7 +478,7 @@ export default function PatientChartModal({ visible, patient, onClose, onNewPres
                         <Text style={s.footerBtnPrimaryText}>New Prescription</Text>
                     </Pressable>
                 </View>
-            </View>
+            </Animated.View>
         </Modal>
     );
 }
@@ -533,11 +528,7 @@ const s = StyleSheet.create({
         color: doctorColors.textMuted,
         marginTop: spacing.xxs,
     },
-    closeBtn: {
-        padding: spacing.sm,
-        borderRadius: radii.full,
-        backgroundColor: doctorColors.surfaceMuted,
-    },
+
 
     // Tabs
     tabRow: {

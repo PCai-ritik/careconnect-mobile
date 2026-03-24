@@ -1,8 +1,8 @@
 /**
  * CareConnect — Patient Profile
  *
- * Settings screen with avatar, editable name/email fields,
- * Save button, and logout action.
+ * Settings screen with avatar (user icon), editable name/email fields,
+ * Save button (with success modal), and logout (with confirmation modal).
  *
  * Uses patientColors tokens + StyleSheet.create(). No Nativewind.
  */
@@ -24,15 +24,24 @@ import {
     spacing,
     typography,
     radii,
-    shadows,
 } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import PatientThemedAlert from '@/components/patient/PatientThemedAlert';
 
 export default function ProfileScreen() {
     const router = useRouter();
     const { logout } = useAuth();
     const [name, setName] = useState('Ananya Sharma');
     const [email, setEmail] = useState('ananya@example.com');
+
+    // Modal states
+    const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+    const [showLogoutAlert, setShowLogoutAlert] = useState(false);
+
+    const handleSave = () => {
+        // In a real app, save to API here
+        setShowSaveSuccess(true);
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -52,7 +61,7 @@ export default function ProfileScreen() {
                 {/* ── Avatar ── */}
                 <View style={styles.avatarSection}>
                     <View style={styles.avatarCircle}>
-                        <Text style={styles.avatarText}>AS</Text>
+                        <Feather name="user" size={40} color="#374151" />
                     </View>
                     <Pressable style={({ pressed }) => [styles.changePicBtn, pressed && { opacity: 0.8 }]}>
                         <Feather name="camera" size={16} color={patientColors.primary} />
@@ -86,7 +95,7 @@ export default function ProfileScreen() {
                 {/* ── Save ── */}
                 <Pressable
                     style={({ pressed }) => [styles.saveBtn, pressed && { opacity: 0.85 }]}
-                    onPress={() => console.log('Profile saved:', { name, email })}
+                    onPress={handleSave}
                 >
                     <Feather name="check" size={18} color="#FFFFFF" />
                     <Text style={styles.saveBtnText}>Save Changes</Text>
@@ -95,17 +104,61 @@ export default function ProfileScreen() {
                 {/* ── Logout ── */}
                 <Pressable
                     style={({ pressed }) => [styles.logoutBtn, pressed && { opacity: 0.8 }]}
-                    onPress={() => logout()}
+                    onPress={() => setShowLogoutAlert(true)}
                 >
                     <Feather name="log-out" size={18} color="#EF4444" />
                     <Text style={styles.logoutBtnText}>Log Out</Text>
                 </Pressable>
             </ScrollView>
+
+            {/* ── Save Success Modal ── */}
+            <PatientThemedAlert
+                visible={showSaveSuccess}
+                variant="success"
+                icon="check-circle"
+                title="Changes Saved"
+                message="Your profile has been updated successfully."
+                confirmLabel="Back to Dashboard"
+                onConfirm={() => {
+                    setShowSaveSuccess(false);
+                    router.replace('/(patient)');
+                }}
+            />
+
+            {/* ── Logout Confirmation Modal ── */}
+            <PatientThemedAlert
+                visible={showLogoutAlert}
+                variant="danger"
+                icon="log-out"
+                title="Log Out"
+                message="Are you sure you want to log out? You'll need to sign in again to access your account."
+                confirmLabel="Log Out"
+                cancelLabel="Cancel"
+                onConfirm={() => {
+                    setShowLogoutAlert(false);
+                    logout();
+                }}
+                onCancel={() => setShowLogoutAlert(false)}
+            />
         </SafeAreaView>
     );
 }
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
+
+const AVATAR_COLORS = [
+    '#FBCFE8', '#FED7AA', '#A5F3FC', '#BBF7D0',
+    '#A5B4FC', '#BAE6FD', '#99F6E4', '#D9F99D',
+    '#FDE68A', '#FECACA', '#DDD6FE',
+];
+
+const getAvatarColor = (name: string): string => {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+};
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: patientColors.background },
@@ -130,11 +183,9 @@ const styles = StyleSheet.create({
     avatarSection: { alignItems: 'center', marginVertical: spacing['2xl'] },
     avatarCircle: {
         width: 96, height: 96, borderRadius: 48,
-        backgroundColor: patientColors.primary, alignItems: 'center', justifyContent: 'center',
+        backgroundColor: getAvatarColor('Ananya Sharma'),
+        alignItems: 'center', justifyContent: 'center',
         marginBottom: spacing.md,
-    },
-    avatarText: {
-        fontFamily: typography.fontFamily.bold, fontSize: 32, color: '#FFFFFF',
     },
     changePicBtn: {
         flexDirection: 'row', alignItems: 'center', gap: spacing.xs,

@@ -22,6 +22,7 @@ import { useRouter } from 'expo-router';
 import {
     View,
     Text,
+    Image,
     Pressable,
     ScrollView,
     Modal,
@@ -29,7 +30,7 @@ import {
     StyleSheet,
     Dimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import {
     patientColors,
@@ -46,6 +47,7 @@ import {
 import type { MockMedicalRecord } from '@/services/mock-data';
 import { useAuth } from '@/hooks/useAuth';
 import MedicalRecordSheet from '@/components/MedicalRecordSheet';
+import PatientThemedAlert from '@/components/patient/PatientThemedAlert';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.85;
@@ -153,6 +155,22 @@ function getInitials(name: string): string {
     return name.split(' ').map((n) => n[0]).join('');
 }
 
+// ─── Avatar Pastel Colors (same palette as doctor dashboard) ─────────────────
+
+const AVATAR_COLORS = [
+    '#FBCFE8', '#FED7AA', '#A5F3FC', '#BBF7D0',
+    '#A5B4FC', '#BAE6FD', '#99F6E4', '#D9F99D',
+    '#FDE68A', '#FECACA', '#DDD6FE',
+];
+
+const getAvatarColor = (name: string): string => {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+};
+
 function currencySymbol(code: string): string {
     return ({ INR: '₹', USD: '$', EUR: '€', GBP: '£' } as Record<string, string>)[code] || code;
 }
@@ -169,6 +187,8 @@ export default function PatientDashboardScreen() {
     const hasNotifications = mockMedicalRecords.length > 0;
     const router = useRouter();
     const { logout } = useAuth();
+    const insets = useSafeAreaInsets();
+    const [showLogoutAlert, setShowLogoutAlert] = useState(false);
 
     // -- Booking modal state --
     const [isBookingOpen, setIsBookingOpen] = useState(false);
@@ -323,8 +343,8 @@ export default function PatientDashboardScreen() {
                             style={({ pressed }) => [ms.doctorCard, pressed && { opacity: 0.85 }]}
                             onPress={() => handleDoctorSelect(doc.id)}
                         >
-                            <View style={[ms.doctorAvatar, { backgroundColor: meta.color + '18' }]}>
-                                <Text style={[ms.doctorAvatarText, { color: meta.color }]}>{getInitials(doc.full_name)}</Text>
+                            <View style={[ms.doctorAvatar, { backgroundColor: getAvatarColor(doc.full_name) }]}>
+                                <Feather name="user" size={20} color="#374151" />
                             </View>
                             <View style={ms.doctorInfo}>
                                 <Text style={ms.doctorName}>{doc.full_name}</Text>
@@ -536,14 +556,15 @@ export default function PatientDashboardScreen() {
                 {/* ── 1. Header ── */}
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
-                        <View style={styles.logoCircle}>
-                            <Feather name="video" size={18} color="#FFFFFF" />
-                        </View>
+                        <Image
+                            source={require('@/assets/images/stethescope.png')}
+                            style={styles.logoImage}
+                        />
                         <Text style={styles.brandText}>CareConnect</Text>
                     </View>
                     <Pressable style={styles.avatarWrapper} onPress={() => setIsProfileMenuOpen(true)}>
-                        <View style={styles.avatar}>
-                            <Text style={styles.avatarText}>AS</Text>
+                        <View style={[styles.avatar, { backgroundColor: getAvatarColor('Ananya Sharma') }]}>
+                            <Feather name="user" size={20} color="#374151" />
                         </View>
                         {hasNotifications && <View style={styles.notificationDot} />}
                     </Pressable>
@@ -561,8 +582,8 @@ export default function PatientDashboardScreen() {
                         <Text style={styles.nextUpLabel}>NEXT UP</Text>
                         <View style={styles.nextUpBody}>
                             <View style={styles.nextUpRow}>
-                                <View style={styles.doctorAvatar}>
-                                    <Text style={styles.doctorAvatarText}>{getInitials(upcomingAppointment.doctorName)}</Text>
+                                <View style={[styles.doctorAvatar, { backgroundColor: getAvatarColor(upcomingAppointment.doctorName) }]}>
+                                    <Feather name="user" size={20} color="#374151" />
                                 </View>
                                 <View style={styles.nextUpInfo}>
                                     <Text style={styles.nextUpDoctor}>{upcomingAppointment.doctorName}</Text>
@@ -636,7 +657,7 @@ export default function PatientDashboardScreen() {
                         <View style={styles.dropdownDivider} />
                         <Pressable
                             style={({ pressed }) => [styles.dropdownItem, pressed && { backgroundColor: '#FEE2E2' }]}
-                            onPress={() => { setIsProfileMenuOpen(false); logout(); }}
+                            onPress={() => { setIsProfileMenuOpen(false); setShowLogoutAlert(true); }}
                         >
                             <Feather name="log-out" size={18} color="#EF4444" />
                             <Text style={[styles.dropdownItemText, { color: '#EF4444' }]}>Logout</Text>
@@ -648,7 +669,7 @@ export default function PatientDashboardScreen() {
             {/* ═══ BOOKING BOTTOM SHEET MODAL ═══ */}
             <Modal animationType="slide" transparent visible={isBookingOpen} onRequestClose={closeBooking}>
                 <Pressable style={ms.backdrop} onPress={closeBooking}><View /></Pressable>
-                <View style={ms.sheet}>
+                <View style={[ms.sheet, { paddingBottom: insets.bottom }]}>
                     <View style={ms.handleBar} />
                     <View style={ms.sheetHeader}>
                         {bookingStep > 1 ? (
@@ -701,6 +722,22 @@ export default function PatientDashboardScreen() {
                 record={selectedRecord}
                 onClose={() => setIsRecordSheetOpen(false)}
             />
+
+            {/* ═══ LOGOUT CONFIRMATION ═══ */}
+            <PatientThemedAlert
+                visible={showLogoutAlert}
+                variant="danger"
+                icon="log-out"
+                title="Log Out"
+                message="Are you sure you want to log out? You'll need to sign in again to access your account."
+                confirmLabel="Log Out"
+                cancelLabel="Cancel"
+                onConfirm={() => {
+                    setShowLogoutAlert(false);
+                    logout();
+                }}
+                onCancel={() => setShowLogoutAlert(false)}
+            />
         </SafeAreaView>
     );
 }
@@ -712,7 +749,7 @@ const styles = StyleSheet.create({
     scrollContent: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xl },
     headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-    logoCircle: { width: 34, height: 34, borderRadius: radii.md, backgroundColor: patientColors.primary, alignItems: 'center', justifyContent: 'center' },
+    logoImage: { width: 34, height: 34, resizeMode: 'contain' },
     brandText: { fontFamily: typography.fontFamily.bold, ...typography.size.lg, color: patientColors.textPrimary },
     avatarWrapper: { position: 'relative' },
 

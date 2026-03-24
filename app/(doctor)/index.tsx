@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import {
     spacing,
     doctorColors,
@@ -25,6 +26,9 @@ import {
 } from '@/services/mock-data';
 import PatientChartModal from '@/components/doctor/PatientChartModal';
 import NewPrescriptionModal from '@/components/doctor/NewPrescriptionModal';
+import AvailabilityModal from '@/components/doctor/AvailabilityModal';
+import ActivityHistoryModal from '@/components/doctor/ActivityHistoryModal';
+import AddPatientModal from '@/components/doctor/AddPatientModal';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -91,7 +95,7 @@ function Avatar({ name, size = 44 }: { name: string; size?: number }) {
     );
 }
 
-function HeroCard({ appointment }: { appointment: DoctorAppointment }) {
+function HeroCard({ appointment, onStartCall }: { appointment: DoctorAppointment; onStartCall: () => void }) {
     return (
         <View style={styles.heroCard}>
             <Text style={styles.heroLabel}>NEXT APPOINTMENT</Text>
@@ -109,9 +113,7 @@ function HeroCard({ appointment }: { appointment: DoctorAppointment }) {
                     styles.heroCta,
                     pressed && styles.heroCtaPressed,
                 ]}
-                onPress={() => {
-                    // TODO: Navigate to video call screen
-                }}
+                onPress={onStartCall}
             >
                 <Feather name="video" size={18} color="#fff" />
                 <Text style={styles.heroCtaText}>Start Video Call</Text>
@@ -137,7 +139,7 @@ function ActionPill({ action, onPress }: { action: QuickAction; onPress?: () => 
     );
 }
 
-function ScheduleRow({ appointment, onPress }: { appointment: DoctorAppointment; onPress: () => void }) {
+function ScheduleRow({ appointment, onPress, onJoin }: { appointment: DoctorAppointment; onPress: () => void; onJoin: () => void }) {
     return (
         <Pressable
             style={({ pressed }) => [
@@ -158,9 +160,7 @@ function ScheduleRow({ appointment, onPress }: { appointment: DoctorAppointment;
                     styles.joinBtn,
                     pressed && { opacity: 0.7 },
                 ]}
-                onPress={() => {
-                    // TODO: Navigate to consultation
-                }}
+                onPress={onJoin}
             >
                 <Feather name="video" size={14} color={doctorColors.primary} />
                 <Text style={styles.joinBtnText}>Join</Text>
@@ -191,9 +191,13 @@ function PatientRow({ patient, onPress }: { patient: MockPatient; onPress: () =>
 // ─── Main Screen ────────────────────────────────────────────────────────────
 
 export default function DoctorHomeScreen() {
+    const router = useRouter();
     const [selectedPatient, setSelectedPatient] = useState<MockPatient | null>(null);
     const [isChartOpen, setIsChartOpen] = useState(false);
     const [isRxOpen, setIsRxOpen] = useState(false);
+    const [isAvailabilityOpen, setIsAvailabilityOpen] = useState(false);
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
 
     const openChart = (patient: MockPatient) => {
         setSelectedPatient(patient);
@@ -233,7 +237,12 @@ export default function DoctorHomeScreen() {
                 </View>
 
                 {/* ── Hero Card ───────────────────────────────────────── */}
-                {nextAppointment && <HeroCard appointment={nextAppointment} />}
+                {nextAppointment && (
+                    <HeroCard
+                        appointment={nextAppointment}
+                        onStartCall={() => router.push(`/(doctor)/consultation/${nextAppointment.id}`)}
+                    />
+                )}
 
                 {/* ── Action Toolbox ──────────────────────────────────── */}
                 <View style={styles.actionsRow}>
@@ -244,7 +253,13 @@ export default function DoctorHomeScreen() {
                             onPress={
                                 action.label === 'New Prescription'
                                     ? () => setIsRxOpen(true)
-                                    : undefined
+                                    : action.label === 'Availability'
+                                        ? () => setIsAvailabilityOpen(true)
+                                        : action.label === 'History'
+                                            ? () => setIsHistoryOpen(true)
+                                            : action.label === 'Add Patient'
+                                                ? () => setIsAddPatientOpen(true)
+                                                : undefined
                             }
                         />
                     ))}
@@ -252,15 +267,26 @@ export default function DoctorHomeScreen() {
 
                 {/* ── Today's Schedule ─────────────────────────────────── */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Today's Schedule</Text>
+                    <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Today's Schedule</Text>
+                        {scheduleAppointments.length > 5 && (
+                            <Pressable
+                                onPress={() => router.push('/(doctor)/appointments')}
+                                style={({ pressed }) => [pressed && { opacity: 0.6 }]}
+                            >
+                                <Text style={styles.showMore}>Show More</Text>
+                            </Pressable>
+                        )}
+                    </View>
                     <View style={styles.card}>
-                        {scheduleAppointments.map((appt, idx) => (
+                        {scheduleAppointments.slice(0, 5).map((appt, idx, arr) => (
                             <View key={appt.id}>
                                 <ScheduleRow
                                     appointment={appt}
                                     onPress={() => openChartFromAppointment(appt)}
+                                    onJoin={() => router.push(`/(doctor)/consultation/${appt.id}`)}
                                 />
-                                {idx < scheduleAppointments.length - 1 && (
+                                {idx < arr.length - 1 && (
                                     <View style={styles.divider} />
                                 )}
                             </View>
@@ -270,15 +296,25 @@ export default function DoctorHomeScreen() {
 
                 {/* ── Recent Patients ──────────────────────────────────── */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Recent Patients</Text>
+                    <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Recent Patients</Text>
+                        {mockRecentPatients.length > 5 && (
+                            <Pressable
+                                onPress={() => router.push('/(doctor)/patients')}
+                                style={({ pressed }) => [pressed && { opacity: 0.6 }]}
+                            >
+                                <Text style={styles.showMore}>Show More</Text>
+                            </Pressable>
+                        )}
+                    </View>
                     <View style={styles.card}>
-                        {mockRecentPatients.map((patient, idx) => (
+                        {mockRecentPatients.slice(0, 5).map((patient, idx, arr) => (
                             <View key={patient.id}>
                                 <PatientRow
                                     patient={patient}
                                     onPress={() => openChart(patient)}
                                 />
-                                {idx < mockRecentPatients.length - 1 && (
+                                {idx < arr.length - 1 && (
                                     <View style={styles.divider} />
                                 )}
                             </View>
@@ -300,6 +336,18 @@ export default function DoctorHomeScreen() {
                 visible={isRxOpen}
                 onClose={() => setIsRxOpen(false)}
             />
+            <AvailabilityModal
+                visible={isAvailabilityOpen}
+                onClose={() => setIsAvailabilityOpen(false)}
+            />
+            <ActivityHistoryModal
+                visible={isHistoryOpen}
+                onClose={() => setIsHistoryOpen(false)}
+            />
+            <AddPatientModal
+                visible={isAddPatientOpen}
+                onClose={() => setIsAddPatientOpen(false)}
+            />
         </SafeAreaView>
     );
 }
@@ -312,7 +360,7 @@ const styles = StyleSheet.create({
         backgroundColor: doctorColors.background,
     },
     scrollContent: {
-        paddingBottom: spacing['6xl'],
+        paddingBottom: spacing.lg,
     },
 
     // ── Header
@@ -445,7 +493,17 @@ const styles = StyleSheet.create({
         fontFamily: typography.fontFamily.bold,
         ...typography.size.lg,
         color: doctorColors.textPrimary,
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         marginBottom: spacing.md,
+    },
+    showMore: {
+        fontFamily: typography.fontFamily.medium,
+        ...typography.size.sm,
+        color: doctorColors.primary,
     },
     card: {
         backgroundColor: doctorColors.surface,

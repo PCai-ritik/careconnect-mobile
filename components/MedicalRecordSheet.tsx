@@ -18,7 +18,9 @@ import {
     Modal,
     StyleSheet,
     Dimensions,
+    Animated,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import {
     patientColors,
@@ -28,6 +30,7 @@ import {
     shadows,
 } from '@/constants/theme';
 import type { MockMedicalRecord } from '@/services/mock-data';
+import useSwipeDown from '@/hooks/useSwipeDown';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.75;
@@ -43,6 +46,9 @@ function getInitials(name: string): string {
 }
 
 export default function MedicalRecordSheet({ visible, record, onClose }: Props) {
+    const insets = useSafeAreaInsets();
+    const { panHandlers, animatedStyle } = useSwipeDown(onClose);
+
     return (
         <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
             {/* Backdrop */}
@@ -51,18 +57,13 @@ export default function MedicalRecordSheet({ visible, record, onClose }: Props) 
             </Pressable>
 
             {/* Sheet */}
-            <View style={styles.sheet}>
-                <View style={styles.handleBar} />
+            <Animated.View style={[styles.sheet, animatedStyle, { paddingBottom: insets.bottom }]}>
+                <View style={styles.handleRow} {...panHandlers}>
+                    <View style={styles.handleBar} />
+                </View>
 
                 {record && (
                     <>
-                        {/* Header */}
-                        <View style={styles.header}>
-                            <Text style={styles.headerTitle}>Record Details</Text>
-                            <Pressable style={styles.closeBtn} onPress={onClose}>
-                                <Feather name="x" size={20} color={patientColors.textMuted} />
-                            </Pressable>
-                        </View>
 
                         <ScrollView
                             contentContainerStyle={styles.scrollContent}
@@ -153,7 +154,7 @@ export default function MedicalRecordSheet({ visible, record, onClose }: Props) 
                         </ScrollView>
                     </>
                 )}
-            </View>
+            </Animated.View>
         </Modal>
     );
 }
@@ -171,7 +172,9 @@ const styles = StyleSheet.create({
     handleBar: {
         width: 40, height: 4, borderRadius: 2,
         backgroundColor: patientColors.border, alignSelf: 'center',
-        marginTop: spacing.sm, marginBottom: spacing.xs,
+    },
+    handleRow: {
+        alignItems: 'center', paddingVertical: spacing.sm,
     },
 
     // Header

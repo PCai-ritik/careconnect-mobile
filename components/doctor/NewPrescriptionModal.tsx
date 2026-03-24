@@ -15,7 +15,10 @@ import {
     TextInput,
     StyleSheet,
     Dimensions,
+    Animated,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import useSwipeDown from '@/hooks/useSwipeDown';
 import { Feather } from '@expo/vector-icons';
 import {
     spacing,
@@ -461,6 +464,8 @@ export default function NewPrescriptionModal({
     patientName = '',
     patientAge = '',
 }: NewPrescriptionModalProps) {
+    const insets = useSafeAreaInsets();
+    const { panHandlers, animatedStyle } = useSwipeDown(onClose);
     const [activeTab, setActiveTab] = useState<TabId>('edit');
     const [formData, setFormData] = useState<Record<string, string>>({
         patientName,
@@ -485,9 +490,9 @@ export default function NewPrescriptionModal({
             <Pressable style={s.backdrop} onPress={onClose} />
 
             {/* Sheet */}
-            <View style={s.sheet}>
+            <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom }]}>
                 {/* Handle */}
-                <View style={s.handleRow}>
+                <View style={s.handleRow} {...panHandlers}>
                     <View style={s.handle} />
                 </View>
 
@@ -499,13 +504,6 @@ export default function NewPrescriptionModal({
                             Fill in the details. Signature & date added automatically.
                         </Text>
                     </View>
-                    <Pressable
-                        onPress={onClose}
-                        hitSlop={12}
-                        style={({ pressed }) => [s.closeBtn, pressed && { opacity: 0.5 }]}
-                    >
-                        <Feather name="x" size={20} color={doctorColors.textMuted} />
-                    </Pressable>
                 </View>
 
                 {/* Segmented Control */}
@@ -567,7 +565,7 @@ export default function NewPrescriptionModal({
                         <Text style={s.footerPrimaryText}>Download & Send PDF</Text>
                     </Pressable>
                 </View>
-            </View>
+            </Animated.View>
         </Modal>
     );
 }
@@ -610,11 +608,7 @@ const s = StyleSheet.create({
         color: doctorColors.textMuted,
         marginTop: spacing.xxs,
     },
-    closeBtn: {
-        padding: spacing.sm,
-        borderRadius: radii.full,
-        backgroundColor: doctorColors.surfaceMuted,
-    },
+
 
     // Segmented Control
     segmentRow: {

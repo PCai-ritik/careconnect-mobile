@@ -1,27 +1,32 @@
 /**
  * CareConnect — Doctor Tab Layout
  *
- * 5-tab bottom navigation for the doctor experience.
- * Auth guard: redirects unauthenticated users and non-doctors.
+ * 5-slot bottom navigation: Home | Schedule | [+] | Patients | Profile
+ * The center [+] button intercepts taps to show a floating action popover
+ * instead of navigating to a screen.
  *
- * Uses useSafeAreaInsets() to dynamically pad above the system
- * navigation bar — works for 3-button nav, gesture nav, and no-bar layouts.
+ * Auth guard: redirects unauthenticated users and non-doctors.
+ * Uses useSafeAreaInsets() to dynamically pad above the system nav bar.
  */
 
+import { useState } from 'react';
+import { View, StyleSheet } from 'react-native';
 import { Tabs, Redirect } from 'expo-router';
-import { StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/useAuth';
 import { DoctorThemeProvider } from '@/providers/ThemeProvider';
-import { doctorColors, typography } from '@/constants/theme';
+import { doctorColors, typography, shadows } from '@/constants/theme';
+import DoctorActionPopover from '@/components/doctor/DoctorActionPopover';
+import NewPrescriptionModal from '@/components/doctor/NewPrescriptionModal';
+import AddPatientModal from '@/components/doctor/AddPatientModal';
 
 const TAB_INACTIVE_COLOR = '#94A3B8';
-const TAB_BAR_HEIGHT = 56;
 
 export default function DoctorTabLayout() {
     const { user, isLoading } = useAuth();
-    const insets = useSafeAreaInsets();
+    const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+    const [isPrescriptionOpen, setIsPrescriptionOpen] = useState(false);
+    const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
 
     if (isLoading) return null;
     if (!user) return <Redirect href="/(auth)/doctor-login" />;
@@ -36,13 +41,10 @@ export default function DoctorTabLayout() {
                     tabBarInactiveTintColor: TAB_INACTIVE_COLOR,
                     tabBarShowLabel: true,
                     tabBarLabelStyle: styles.tabLabel,
-                    tabBarStyle: {
-                        ...styles.tabBar,
-                        paddingBottom: insets.bottom,
-                        height: TAB_BAR_HEIGHT + insets.bottom,
-                    },
+                    tabBarStyle: styles.tabBar,
                 }}
             >
+                {/* ── Slot 1: Home ── */}
                 <Tabs.Screen
                     name="index"
                     options={{
@@ -52,6 +54,8 @@ export default function DoctorTabLayout() {
                         ),
                     }}
                 />
+
+                {/* ── Slot 2: Schedule ── */}
                 <Tabs.Screen
                     name="appointments"
                     options={{
@@ -61,6 +65,28 @@ export default function DoctorTabLayout() {
                         ),
                     }}
                 />
+
+                {/* ── Slot 3: Center Action Button (intercepted) ── */}
+                <Tabs.Screen
+                    name="action"
+                    options={{
+                        title: '',
+                        tabBarLabel: () => null,
+                        tabBarIcon: () => (
+                            <View style={styles.centerBtn}>
+                                <Feather name="plus" size={26} color="#FFFFFF" />
+                            </View>
+                        ),
+                    }}
+                    listeners={{
+                        tabPress: (e) => {
+                            e.preventDefault();
+                            setIsActionMenuOpen(true);
+                        },
+                    }}
+                />
+
+                {/* ── Slot 4: Patients ── */}
                 <Tabs.Screen
                     name="patients"
                     options={{
@@ -70,15 +96,8 @@ export default function DoctorTabLayout() {
                         ),
                     }}
                 />
-                <Tabs.Screen
-                    name="messages"
-                    options={{
-                        title: 'Messages',
-                        tabBarIcon: ({ color, size }) => (
-                            <Feather name="message-square" size={size} color={color} />
-                        ),
-                    }}
-                />
+
+                {/* ── Slot 5: Profile ── */}
                 <Tabs.Screen
                     name="profile"
                     options={{
@@ -88,7 +107,42 @@ export default function DoctorTabLayout() {
                         ),
                     }}
                 />
+
+                {/* ── Hidden routes (no tab bar entry) ── */}
+                <Tabs.Screen
+                    name="consultation/[id]"
+                    options={{ href: null }}
+                />
+                <Tabs.Screen
+                    name="messages"
+                    options={{ href: null }}
+                />
             </Tabs>
+
+            {/* ── Floating Action Popover ── */}
+            <DoctorActionPopover
+                visible={isActionMenuOpen}
+                onClose={() => setIsActionMenuOpen(false)}
+                onPrescription={() => {
+                    setIsActionMenuOpen(false);
+                    setIsPrescriptionOpen(true);
+                }}
+                onAddPatient={() => {
+                    setIsActionMenuOpen(false);
+                    setIsAddPatientOpen(true);
+                }}
+            />
+
+            {/* ── Global Modals ── */}
+            <NewPrescriptionModal
+                visible={isPrescriptionOpen}
+                onClose={() => setIsPrescriptionOpen(false)}
+                patientName=""
+            />
+            <AddPatientModal
+                visible={isAddPatientOpen}
+                onClose={() => setIsAddPatientOpen(false)}
+            />
         </DoctorThemeProvider>
     );
 }
@@ -104,5 +158,15 @@ const styles = StyleSheet.create({
         fontFamily: typography.fontFamily.medium,
         fontSize: 10,
         marginTop: -2,
+    },
+    centerBtn: {
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        backgroundColor: doctorColors.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: -15,
+        ...shadows.elevated,
     },
 });

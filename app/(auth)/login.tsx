@@ -15,6 +15,7 @@ import { useState, useCallback, useEffect } from 'react';
 import {
     View,
     Text,
+    Image,
     TextInput,
     Pressable,
     ActivityIndicator,
@@ -95,9 +96,8 @@ export default function LoginScreen() {
     const params = useLocalSearchParams<{ role?: string }>();
     const { login } = useAuth();
 
-    // Role state — default to patient, respect deep-link param
-    const initialRole: Role = params.role === 'doctor' ? 'doctor' : 'patient';
-    const [role, setRole] = useState<Role>(initialRole);
+    // Always start as patient; deep-link `?role=doctor` handled via effect
+    const [role, setRole] = useState<Role>('patient');
     const [isAnimating, setIsAnimating] = useState(false);
 
     // Form state
@@ -110,9 +110,17 @@ export default function LoginScreen() {
     // ── Animation values ────────────────────────────────────────────────
 
     // 0 = patient, 1 = doctor
-    const colorProgress = useSharedValue(initialRole === 'doctor' ? 1 : 0);
+    const colorProgress = useSharedValue(0);
     // Form slide offset
     const slideX = useSharedValue(0);
+
+    // Deep-link support: switch to doctor if `?role=doctor` param is present
+    useEffect(() => {
+        if (params.role === 'doctor') {
+            setRole('doctor');
+            colorProgress.value = 1;
+        }
+    }, []);
 
     // ── Switch Role with Animation ──────────────────────────────────────
 
@@ -141,8 +149,11 @@ export default function LoginScreen() {
             });
         });
 
-        // Animate colors over the full duration
-        colorProgress.value = withTiming(nextRole === 'doctor' ? 1 : 0, ANIM_CONFIG);
+        // Transition colors during the slide-out so they're done before slide-in
+        colorProgress.value = withTiming(
+            nextRole === 'doctor' ? 1 : 0,
+            { duration: ANIM_DURATION / 2, easing: Easing.in(Easing.cubic) },
+        );
     }, [role, isAnimating, loading, colorProgress, slideX]);
 
     // ── Animated Styles ─────────────────────────────────────────────────
@@ -238,9 +249,16 @@ export default function LoginScreen() {
 
                         {/* ── Logo & Tagline (animated color) ─────────── */}
                         <Animated.View style={[styles.logoContainer, animatedSlide]}>
-                            <Animated.View style={[styles.logoIcon, animatedLogoIcon]}>
-                                <Feather name={config.icon} size={28} color="#FFFFFF" />
-                            </Animated.View>
+                            {role === 'patient' ? (
+                                <Image
+                                    source={require('@/assets/images/stethescope.png')}
+                                    style={styles.logoImage}
+                                />
+                            ) : (
+                                <Animated.View style={[styles.logoIcon, animatedLogoIcon]}>
+                                    <Feather name={config.icon} size={28} color="#FFFFFF" />
+                                </Animated.View>
+                            )}
                             <View style={styles.logoTitleRow}>
                                 <Text style={[styles.logoText, { color: colors.textPrimary }]}>
                                     {config.title}
@@ -446,6 +464,12 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginBottom: spacing.md,
         ...shadows.card,
+    },
+    logoImage: {
+        width: 56,
+        height: 56,
+        resizeMode: 'contain',
+        marginBottom: spacing.md,
     },
     logoTitleRow: {
         flexDirection: 'row',

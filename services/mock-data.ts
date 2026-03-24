@@ -329,16 +329,19 @@ export const mockPostCallSummary = {
 export type DoctorAppointment = {
     id: string;
     patientName: string;
+    date: string;
     time: string;
     type: 'Video Consultation' | 'Follow-up' | 'New Patient' | 'In-Person';
-    status: 'upcoming' | 'scheduled' | 'completed';
+    status: 'upcoming' | 'scheduled' | 'completed' | 'pending';
     avatar: string;
+    reason?: string;
 };
 
 export const mockDoctorAppointments: DoctorAppointment[] = [
     {
         id: 'dappt-001',
         patientName: 'Ananya Gupta',
+        date: 'Today',
         time: '9:00 AM',
         type: 'Video Consultation',
         status: 'upcoming',
@@ -347,26 +350,105 @@ export const mockDoctorAppointments: DoctorAppointment[] = [
     {
         id: 'dappt-002',
         patientName: 'Rahul Verma',
+        date: 'Today',
         time: '10:30 AM',
         type: 'Follow-up',
-        status: 'scheduled',
+        status: 'upcoming',
         avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Rahul+Verma&backgroundColor=b6e3f4',
     },
     {
         id: 'dappt-003',
         patientName: 'Meera Iyer',
+        date: 'Today',
         time: '11:45 AM',
         type: 'New Patient',
-        status: 'scheduled',
+        status: 'upcoming',
         avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Meera+Iyer&backgroundColor=c0aede',
     },
     {
         id: 'dappt-004',
         patientName: 'Siddharth Rao',
+        date: 'Today',
         time: '2:00 PM',
         type: 'Video Consultation',
-        status: 'scheduled',
+        status: 'upcoming',
         avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Siddharth+Rao&backgroundColor=d1f4d9',
+    },
+    {
+        id: 'dappt-005',
+        patientName: 'Sarah Johnson',
+        date: 'Tomorrow',
+        time: '9:30 AM',
+        type: 'Video Consultation',
+        status: 'upcoming',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Sarah+Johnson&backgroundColor=ffd5dc',
+    },
+    {
+        id: 'dappt-006',
+        patientName: 'Michael Brown',
+        date: 'Mar 25',
+        time: '11:00 AM',
+        type: 'Follow-up',
+        status: 'upcoming',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Michael+Brown&backgroundColor=b6e3f4',
+    },
+    {
+        id: 'dappt-007',
+        patientName: 'Emily Davis',
+        date: 'Mar 20',
+        time: '3:00 PM',
+        type: 'Video Consultation',
+        status: 'completed',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Emily+Davis&backgroundColor=c0aede',
+    },
+    {
+        id: 'dappt-008',
+        patientName: 'Ananya Gupta',
+        date: 'Mar 18',
+        time: '10:00 AM',
+        type: 'Follow-up',
+        status: 'completed',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Ananya+Gupta&backgroundColor=ffd5dc',
+    },
+    {
+        id: 'dappt-009',
+        patientName: 'James Wilson',
+        date: 'Mar 15',
+        time: '1:00 PM',
+        type: 'In-Person',
+        status: 'completed',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=James+Wilson&backgroundColor=d1f4d9',
+    },
+    // ── Pending Requests ──
+    {
+        id: 'dappt-010',
+        patientName: 'Priya Sharma',
+        date: 'Mar 26',
+        time: '10:00 AM',
+        type: 'New Patient',
+        status: 'pending',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Priya+Sharma&backgroundColor=ffd5dc',
+        reason: 'Persistent headaches and dizziness for the past two weeks. Would like a general consultation.',
+    },
+    {
+        id: 'dappt-011',
+        patientName: 'David Lee',
+        date: 'Mar 27',
+        time: '2:30 PM',
+        type: 'Video Consultation',
+        status: 'pending',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=David+Lee&backgroundColor=b6e3f4',
+        reason: 'Follow-up on recent blood work results. Need to discuss cholesterol levels.',
+    },
+    {
+        id: 'dappt-012',
+        patientName: 'Aisha Patel',
+        date: 'Mar 28',
+        time: '11:00 AM',
+        type: 'New Patient',
+        status: 'pending',
+        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Aisha+Patel&backgroundColor=c0aede',
+        reason: 'Seasonal allergies getting worse. Looking for long-term management plan.',
     },
 ];
 
@@ -375,6 +457,8 @@ export const mockDoctorAppointments: DoctorAppointment[] = [
 export type MockPatient = {
     id: string;
     name: string;
+    age?: number;
+    gender?: 'Male' | 'Female' | 'Other';
     condition: string;
     lastVisit: string;
     avatar: string;
@@ -383,24 +467,92 @@ export type MockPatient = {
 export const mockRecentPatients: MockPatient[] = [
     {
         id: 'pt-001',
-        name: 'Ananya Gupta',
+        name: 'Sarah Johnson',
+        age: 34,
+        gender: 'Female',
         condition: 'Hypertension',
         lastVisit: '2 days ago',
-        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Ananya+Gupta&backgroundColor=ffd5dc',
+        avatar: '',
     },
     {
         id: 'pt-002',
-        name: 'Rahul Verma',
+        name: 'Michael Brown',
+        age: 52,
+        gender: 'Male',
         condition: 'Type 2 Diabetes',
         lastVisit: '5 days ago',
-        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Rahul+Verma&backgroundColor=b6e3f4',
+        avatar: '',
     },
     {
         id: 'pt-003',
-        name: 'Meera Iyer',
+        name: 'Emily Davis',
+        age: 28,
+        gender: 'Female',
         condition: 'Anxiety Disorder',
         lastVisit: '1 week ago',
-        avatar: 'https://api.dicebear.com/7.x/initials/png?seed=Meera+Iyer&backgroundColor=c0aede',
+        avatar: '',
+    },
+    {
+        id: 'pt-004',
+        name: 'James Wilson',
+        age: 45,
+        gender: 'Male',
+        condition: 'Chronic Back Pain',
+        lastVisit: 'Mar 10, 2026',
+        avatar: '',
+    },
+    {
+        id: 'pt-005',
+        name: 'Emma Smith',
+        age: 31,
+        gender: 'Female',
+        condition: 'Migraine',
+        lastVisit: 'Mar 8, 2026',
+        avatar: '',
+    },
+    {
+        id: 'pt-006',
+        name: 'David Lee',
+        age: 60,
+        gender: 'Male',
+        condition: 'High Cholesterol',
+        lastVisit: 'Mar 5, 2026',
+        avatar: '',
+    },
+    {
+        id: 'pt-007',
+        name: 'Olivia Martinez',
+        age: 22,
+        gender: 'Female',
+        condition: 'Seasonal Allergies',
+        lastVisit: 'Feb 28, 2026',
+        avatar: '',
+    },
+    {
+        id: 'pt-008',
+        name: 'Robert Taylor',
+        age: 41,
+        gender: 'Male',
+        condition: 'Asthma',
+        lastVisit: 'Feb 20, 2026',
+        avatar: '',
+    },
+    {
+        id: 'pt-009',
+        name: 'Sophia Anderson',
+        age: 38,
+        gender: 'Female',
+        condition: 'Thyroid Disorder',
+        lastVisit: 'Feb 15, 2026',
+        avatar: '',
+    },
+    {
+        id: 'pt-010',
+        name: 'Daniel Thomas',
+        age: 55,
+        gender: 'Male',
+        condition: 'Arthritis',
+        lastVisit: 'Feb 10, 2026',
+        avatar: '',
     },
 ];
-
