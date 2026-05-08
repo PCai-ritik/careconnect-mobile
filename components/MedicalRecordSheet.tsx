@@ -5,7 +5,7 @@
  * for a single medical record. Used on both the dashboard
  * and the dedicated records page.
  *
- * Props: visible, record (MockMedicalRecord | null), onClose
+ * Props: visible, record (MedicalRecord | null), onClose
  *
  * Uses patientColors tokens + StyleSheet.create(). No Nativewind.
  */
@@ -29,7 +29,7 @@ import {
     radii,
     shadows,
 } from '@/constants/theme';
-import type { MockMedicalRecord } from '@/services/mock-data';
+import type { MedicalRecord } from '@/services/types';
 import useSwipeDown from '@/hooks/useSwipeDown';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -37,7 +37,7 @@ const SHEET_HEIGHT = SCREEN_HEIGHT * 0.75;
 
 interface Props {
     visible: boolean;
-    record: MockMedicalRecord | null;
+    record: MedicalRecord | null;
     onClose: () => void;
 }
 
@@ -73,12 +73,12 @@ export default function MedicalRecordSheet({ visible, record, onClose }: Props) 
                             <View style={styles.doctorRow}>
                                 <View style={styles.doctorAvatar}>
                                     <Text style={styles.doctorAvatarText}>
-                                        {getInitials(record.doctorName)}
+                                        {getInitials('Doctor')}
                                     </Text>
                                 </View>
                                 <View style={styles.doctorInfo}>
-                                    <Text style={styles.doctorName}>{record.doctorName}</Text>
-                                    <Text style={styles.doctorDate}>{record.date}</Text>
+                                    <Text style={styles.doctorName}>Doctor</Text>
+                                    <Text style={styles.doctorDate}>{new Date(record.created_at).toLocaleDateString()}</Text>
                                 </View>
                             </View>
 
@@ -92,27 +92,31 @@ export default function MedicalRecordSheet({ visible, record, onClose }: Props) 
                             </View>
 
                             {/* Symptoms */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Feather name="list" size={16} color={patientColors.primary} />
-                                    <Text style={styles.sectionLabel}>Symptoms</Text>
-                                </View>
-                                {record.symptoms.split(', ').map((s, i) => (
-                                    <View key={i} style={styles.bulletRow}>
-                                        <View style={styles.bullet} />
-                                        <Text style={styles.bulletText}>{s.trim()}</Text>
+                            {record.symptoms && (
+                                <View style={styles.section}>
+                                    <View style={styles.sectionHeader}>
+                                        <Feather name="list" size={16} color={patientColors.primary} />
+                                        <Text style={styles.sectionLabel}>Symptoms</Text>
                                     </View>
-                                ))}
-                            </View>
+                                    {record.symptoms.split(', ').map((s, i) => (
+                                        <View key={i} style={styles.bulletRow}>
+                                            <View style={styles.bullet} />
+                                            <Text style={styles.bulletText}>{s.trim()}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
 
                             {/* Treatment */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Feather name="clipboard" size={16} color={patientColors.primary} />
-                                    <Text style={styles.sectionLabel}>Treatment</Text>
+                            {record.treatment && (
+                                <View style={styles.section}>
+                                    <View style={styles.sectionHeader}>
+                                        <Feather name="clipboard" size={16} color={patientColors.primary} />
+                                        <Text style={styles.sectionLabel}>Treatment</Text>
+                                    </View>
+                                    <Text style={styles.bodyText}>{record.treatment}</Text>
                                 </View>
-                                <Text style={styles.bodyText}>{record.treatment}</Text>
-                            </View>
+                            )}
 
                             {/* Prescriptions */}
                             {record.prescriptions.length > 0 && (
@@ -121,23 +125,25 @@ export default function MedicalRecordSheet({ visible, record, onClose }: Props) 
                                         <Feather name="package" size={16} color={patientColors.primary} />
                                         <Text style={styles.sectionLabel}>Prescriptions</Text>
                                     </View>
-                                    {record.prescriptions.map((p, i) => (
-                                        <View key={i} style={styles.bulletRow}>
+                                    {record.prescriptions.map((p) => (
+                                        <View key={p.id} style={styles.bulletRow}>
                                             <View style={styles.bullet} />
-                                            <Text style={styles.bulletText}>{p}</Text>
+                                            <Text style={styles.bulletText}>
+                                                {p.medication_name}{p.dosage ? ` — ${p.dosage}` : ''}{p.frequency ? ` (${p.frequency})` : ''}
+                                            </Text>
                                         </View>
                                     ))}
                                 </View>
                             )}
 
                             {/* Follow-up */}
-                            {record.followUp && (
+                            {record.follow_up_date && (
                                 <View style={styles.followUpBox}>
                                     <View style={styles.sectionHeader}>
                                         <Feather name="calendar" size={16} color={patientColors.primary} />
                                         <Text style={styles.sectionLabel}>Follow-Up</Text>
                                     </View>
-                                    <Text style={styles.followUpText}>{record.followUp}</Text>
+                                    <Text style={styles.followUpText}>{new Date(record.follow_up_date).toLocaleDateString()}</Text>
                                 </View>
                             )}
 

@@ -2,10 +2,12 @@
  * CareConnect — Edit Profile Modal (Doctor)
  *
  * 85%-height Bottom Sheet with a traditional form for editing
- * doctor profile details. Uses doctorColors + StyleSheet.create().
+ * doctor profile details. Pre-fills from DoctorProfile prop.
+ * Calls PATCH /doctors/profile on save.
+ * Uses doctorColors + StyleSheet.create().
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -16,6 +18,7 @@ import {
     StyleSheet,
     Dimensions,
     Animated,
+    ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useSwipeDown from '@/hooks/useSwipeDown';
@@ -27,6 +30,9 @@ import {
     shadows,
     radii,
 } from '@/constants/theme';
+import { useAuth } from '@/hooks/useAuth';
+import { updateDoctorProfile } from '@/services/doctor';
+import type { DoctorProfile } from '@/services/types';
 import ThemedAlert from '@/components/doctor/ThemedAlert';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -34,20 +40,55 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 interface EditProfileModalProps {
     visible: boolean;
     onClose: () => void;
+    profile?: DoctorProfile | null;
+    onSaved?: () => void;
 }
 
-export default function EditProfileModal({ visible, onClose }: EditProfileModalProps) {
+export default function EditProfileModal({ visible, onClose, profile, onSaved }: EditProfileModalProps) {
     const insets = useSafeAreaInsets();
     const { panHandlers, animatedStyle } = useSwipeDown(onClose);
-    const [fullName, setFullName] = useState('Dr. Robert Chen');
-    const [specialization, setSpecialization] = useState('Cardiologist');
-    const [regNumber, setRegNumber] = useState('NMC-78291');
-    const [fee, setFee] = useState('500');
-    const [whatsapp, setWhatsapp] = useState('+1 234 567 8900');
+    const { token } = useAuth();
+
+    const [fullName, setFullName] = useState('');
+    const [specialization, setSpecialization] = useState('');
+    const [regNumber, setRegNumber] = useState('');
+    const [fee, setFee] = useState('');
+    const [phone, setPhone] = useState('');
+    const [bio, setBio] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
 
-    const handleSave = () => {
-        setShowSuccess(true);
+    // Pre-fill form from profile when modal opens
+    useEffect(() => {
+        if (visible && profile) {
+            setFullName(profile.full_name ?? '');
+            setSpecialization(profile.specialization ?? '');
+            setRegNumber(profile.license_number ?? '');
+            setFee(profile.consultation_fee?.toString() ?? '');
+            setPhone(profile.phone_number ?? '');
+            setBio(profile.bio ?? '');
+        }
+    }, [visible, profile]);
+
+    const handleSave = async () => {
+        if (!token) return;
+        setIsSaving(true);
+        try {
+            await updateDoctorProfile(token, {
+                full_name: fullName.trim() || undefined,
+                specialization: specialization.trim() || undefined,
+                license_number: regNumber.trim() || undefined,
+                consultation_fee: fee ? parseFloat(fee) : undefined,
+                phone_number: phone.trim() || undefined,
+                bio: bio.trim() || undefined,
+            });
+            setShowSuccess(true);
+            onSaved?.();
+        } catch (err) {
+            console.error('Failed to save profile:', err);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -106,11 +147,18 @@ export default function EditProfileModal({ visible, onClose }: EditProfileModalP
                             keyboardType="numeric"
                         />
                         <Field
-                            label="WhatsApp Number"
-                            value={whatsapp}
-                            onChangeText={setWhatsapp}
-                            placeholder="e.g., +1 234 567 8900"
+                            label="Phone Number"
+                            value={phone}
+                            onChangeText={setPhone}
+                            placeholder="e.g., +91 98765 43210"
                             keyboardType="phone-pad"
+                        />
+                        <Field
+                            label="Bio"
+                            value={bio}
+                            onChangeText={setBio}
+                            placeholder="Brief professional bio..."
+                            multiline
                         />
                     </ScrollView>
 
@@ -118,13 +166,21 @@ export default function EditProfileModal({ visible, onClose }: EditProfileModalP
                     <View style={s.footer}>
                         <Pressable
                             onPress={handleSave}
+                            disabled={isSaving}
                             style={({ pressed }) => [
                                 s.saveBtn,
+                                isSaving && { opacity: 0.6 },
                                 pressed && { backgroundColor: doctorColors.primaryDark },
                             ]}
                         >
-                            <Feather name="check" size={18} color="#fff" />
-                            <Text style={s.saveBtnText}>Save Changes</Text>
+                            {isSaving ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <>
+                                    <Feather name="check" size={18} color="#fff" />
+                                    <Text style={s.saveBtnText}>Save Changes</Text>
+                                </>
+                            )}
                         </Pressable>
                     </View>
                 </Animated.View>
@@ -154,23 +210,26 @@ function Field({
     onChangeText,
     placeholder,
     keyboardType,
+    multiline,
 }: {
     label: string;
     value: string;
     onChangeText: (text: string) => void;
     placeholder: string;
     keyboardType?: 'default' | 'numeric' | 'phone-pad';
+    multiline?: boolean;
 }) {
     return (
         <View style={s.fieldGroup}>
             <Text style={s.fieldLabel}>{label}</Text>
             <TextInput
-                style={s.fieldInput}
+                style={[s.fieldInput, multiline && { minHeight: 80, textAlignVertical: 'top' as const }]}
                 value={value}
                 onChangeText={onChangeText}
                 placeholder={placeholder}
                 placeholderTextColor={doctorColors.textMuted}
                 keyboardType={keyboardType ?? 'default'}
+                multiline={multiline}
             />
         </View>
     );

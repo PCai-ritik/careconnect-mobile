@@ -7,13 +7,14 @@
  * Uses patientColors tokens + StyleSheet.create(). No Nativewind.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     View,
     Text,
     Pressable,
     ScrollView,
     StyleSheet,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -25,14 +26,35 @@ import {
     radii,
     shadows,
 } from '@/constants/theme';
-import { mockMedicalRecords } from '@/services/mock-data';
-import type { MockMedicalRecord } from '@/services/mock-data';
+import { useAuth } from '@/hooks/useAuth';
+import { getPatientRecords, getLinkedPatients } from '@/services/caregiver';
+import type { MedicalRecord } from '@/services/types';
 import MedicalRecordSheet from '@/components/MedicalRecordSheet';
 
 export default function RecordsScreen() {
     const router = useRouter();
-    const [selectedRecord, setSelectedRecord] = useState<MockMedicalRecord | null>(null);
+    const { token } = useAuth();
+    const [records, setRecords] = useState<MedicalRecord[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
     const [isRecordSheetOpen, setIsRecordSheetOpen] = useState(false);
+
+    useEffect(() => {
+        (async () => {
+            if (!token) return;
+            try {
+                const patients = await getLinkedPatients(token);
+                if (patients.length > 0) {
+                    const recs = await getPatientRecords(token, patients[0].id);
+                    setRecords(recs);
+                }
+            } catch (e) {
+                console.error('Failed to fetch records:', e);
+            } finally {
+                setLoading(false);
+            }
+        })();
+    }, [token]);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -52,11 +74,17 @@ export default function RecordsScreen() {
                 {/* Summary */}
                 <View style={styles.countRow}>
                     <Feather name="folder" size={16} color={patientColors.primary} />
-                    <Text style={styles.countText}>{mockMedicalRecords.length} records on file</Text>
+                    <Text style={styles.countText}>{records.length} records on file</Text>
                 </View>
 
+                {loading ? (
+                    <ActivityIndicator size="large" color={patientColors.primary} style={{ marginTop: spacing['2xl'] }} />
+                ) : records.length === 0 ? (
+                    <Text style={{ ...typography.size.base, color: patientColors.textMuted, textAlign: 'center', marginTop: spacing['2xl'] }}>No medical records found.</Text>
+                ) : null}
+
                 {/* Records list */}
-                {mockMedicalRecords.map((record) => (
+                {!loading && records.map((record) => (
                     <Pressable
                         key={record.id}
                         style={({ pressed }) => [styles.recordCard, pressed && { opacity: 0.85 }]}
@@ -68,21 +96,21 @@ export default function RecordsScreen() {
                         <View style={styles.recordBody}>
                             <View style={styles.recordTop}>
                                 <Text style={styles.recordDiagnosis}>{record.diagnosis}</Text>
-                                {record.followUp && (
+                                {record.follow_up_date && (
                                     <View style={styles.followUpBadge}>
                                         <Feather name="calendar" size={10} color={patientColors.primary} />
                                         <Text style={styles.followUpBadgeText}>Follow-up</Text>
                                     </View>
                                 )}
                             </View>
-                            <Text style={styles.recordMeta}>{record.doctorName}  •  {record.date}</Text>
+                            <Text style={styles.recordMeta}>Doctor  •  {new Date(record.created_at).toLocaleDateString()}</Text>
 
                             {/* Prescription pills */}
                             {record.prescriptions.length > 0 && (
                                 <View style={styles.rxRow}>
                                     <Feather name="package" size={12} color={patientColors.textMuted} />
                                     <Text style={styles.rxText} numberOfLines={1}>
-                                        {record.prescriptions.join(', ')}
+                                        {record.prescriptions.map(p => p.medication_name).join(', ')}
                                     </Text>
                                 </View>
                             )}
@@ -100,7 +128,7 @@ export default function RecordsScreen() {
                 record={selectedRecord}
                 onClose={() => setIsRecordSheetOpen(false)}
             />
-        </SafeAreaView>
+        </SafeAreaView >
     );
 }
 

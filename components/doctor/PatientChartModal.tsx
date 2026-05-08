@@ -8,7 +8,7 @@
  *   3. Medications (flat list of all prescriptions)
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -18,6 +18,7 @@ import {
     StyleSheet,
     Dimensions,
     Animated,
+    ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useSwipeDown from '@/hooks/useSwipeDown';
@@ -29,110 +30,38 @@ import {
     shadows,
     radii,
 } from '@/constants/theme';
-import { MockPatient } from '@/services/mock-data';
+import { PatientProfile as RealPatientProfile, MedicalRecord } from '@/services/types';
+import { useAuth } from '@/hooks/useAuth';
+import { getPatientRecords } from '@/services/doctor';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// ─── Types (matching the web's PatientData & ConsultationRecord) ─────────────
+// ─── Helpers to convert MedicalRecord → display format ──────────────────────
 
-interface PatientProfile {
-    phone: string;
-    dateOfBirth: string;
-    gender: string;
-    bloodGroup: string;
-    address: string;
-    allergies: string[];
-    existingConditions: string[];
-    emergencyContact: {
-        name: string;
-        phone: string;
-    };
+function formatRecordDate(isoDate: string): string {
+    const d = new Date(isoDate);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-interface ConsultationRecord {
-    id: string;
-    date: string;
-    diagnosis: string;
-    symptoms: string;
-    treatment: string;
-    prescriptions: string[];
-    followUp: string | null;
-    vitals: {
-        bp: string;
-        pulse: string;
-        temp: string;
-        weight: string;
-    };
+function getPrescriptionStrings(record: MedicalRecord): string[] {
+    return record.prescriptions.map(p => {
+        const parts = [p.medication_name];
+        if (p.dosage) parts.push(p.dosage);
+        if (p.frequency) parts.push(`- ${p.frequency}`);
+        if (p.duration) parts.push(`for ${p.duration}`);
+        return parts.join(' ');
+    });
 }
 
-// ─── Mock Data (matching the web 1:1) ───────────────────────────────────────
-
-const MOCK_PROFILE: PatientProfile = {
-    phone: '+91 98765 43210',
-    dateOfBirth: 'Mar 15, 1990',
-    gender: 'Female',
-    bloodGroup: 'B+',
-    address: '42 Residency Rd, Bengaluru',
-    allergies: ['Penicillin', 'Sulfa Drugs'],
-    existingConditions: ['Hypertension', 'Mild Asthma'],
-    emergencyContact: {
-        name: 'Vikram Gupta',
-        phone: '+91 98765 43211',
-    },
-};
-
-const mockConsultations: ConsultationRecord[] = [
-    {
-        id: '1',
-        date: 'Jan 10, 2026',
-        diagnosis: 'Upper Respiratory Infection',
-        symptoms: 'Persistent cough, sore throat, mild fever (99.5°F)',
-        treatment: 'Prescribed antibiotics course, rest advised, increased fluid intake',
-        prescriptions: [
-            'Amoxicillin 500mg - 3 times daily for 7 days',
-            'Acetaminophen 500mg - as needed for fever',
-            'Cough syrup - 10ml twice daily',
-        ],
-        followUp: 'Jan 17, 2026',
-        vitals: { bp: '120/80', pulse: '78 bpm', temp: '99.5°F', weight: '72 kg' },
-    },
-    {
-        id: '2',
-        date: 'Dec 15, 2025',
-        diagnosis: 'Annual Health Checkup - All Clear',
-        symptoms: 'Routine examination, no complaints',
-        treatment: 'Continue current lifestyle, recommended vitamin D supplements',
-        prescriptions: ['Vitamin D3 60K - Once weekly for 8 weeks'],
-        followUp: null,
-        vitals: { bp: '118/76', pulse: '72 bpm', temp: '98.6°F', weight: '71 kg' },
-    },
-    {
-        id: '3',
-        date: 'Nov 05, 2025',
-        diagnosis: 'Migraine with Aura',
-        symptoms: 'Severe headache, light sensitivity, nausea, visual disturbances',
-        treatment: 'Prescribed migraine-specific medication, lifestyle modifications advised',
-        prescriptions: [
-            'Sumatriptan 50mg - as needed for migraine attack',
-            'Metoclopramide 10mg - for nausea',
-        ],
-        followUp: 'Dec 05, 2025',
-        vitals: { bp: '125/82', pulse: '80 bpm', temp: '98.4°F', weight: '71 kg' },
-    },
-    {
-        id: '4',
-        date: 'Sep 20, 2025',
-        diagnosis: 'Seasonal Allergies',
-        symptoms: 'Sneezing, runny nose, itchy eyes',
-        treatment: 'Antihistamine medication, nasal spray',
-        prescriptions: [
-            'Cetirizine 10mg - once daily for 14 days',
-            'Fluticasone nasal spray - twice daily',
-        ],
-        followUp: null,
-        vitals: { bp: '120/78', pulse: '74 bpm', temp: '98.6°F', weight: '70 kg' },
-    },
-];
+function getVitals(record: MedicalRecord): { bp: string; pulse: string; temp: string; weight: string } {
+    const v = record.vitals as Record<string, string> | null;
+    return {
+        bp: v?.bp ?? '—',
+        pulse: v?.pulse ?? '—',
+        temp: v?.temp ?? '—',
+        weight: v?.weight ?? '—',
+    };
+}
 
 // ─── Avatar Color (same hash as dashboard) ──────────────────────────────────
 
@@ -155,7 +84,7 @@ type TabId = 'history' | 'profile' | 'medications';
 
 interface PatientChartModalProps {
     visible: boolean;
-    patient: MockPatient | null;
+    patient: RealPatientProfile | null;
     onClose: () => void;
     onNewPrescription?: () => void;
 }
@@ -192,36 +121,50 @@ function Badge({ label, variant }: { label: string; variant: 'danger' | 'info' }
 
 // ─── Tab: Consultation History ──────────────────────────────────────────────
 
-function HistoryTab() {
+function HistoryTab({ records }: { records: MedicalRecord[] }) {
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
     const toggle = (id: string) => {
         setExpandedId((prev) => (prev === id ? null : id));
     };
 
+    if (records.length === 0) {
+        return (
+            <View style={s.historyContainer}>
+                <Text style={s.sectionLabel}>Past Consultations (0)</Text>
+                <View style={{ alignItems: 'center', paddingVertical: spacing['3xl'] }}>
+                    <Feather name="file-text" size={32} color={doctorColors.textMuted} />
+                    <Text style={{ ...typography.size.sm, color: doctorColors.textMuted, marginTop: spacing.md }}>No consultation records yet</Text>
+                </View>
+            </View>
+        );
+    }
+
     return (
         <View style={s.historyContainer}>
             <Text style={s.sectionLabel}>
-                Past Consultations ({mockConsultations.length})
+                Past Consultations ({records.length})
             </Text>
-            {mockConsultations.map((c) => {
-                const isOpen = expandedId === c.id;
+            {records.map((record) => {
+                const isOpen = expandedId === record.id;
+                const rxStrings = getPrescriptionStrings(record);
+                const vitals = getVitals(record);
                 return (
-                    <View key={c.id} style={s.accordionWrapper}>
+                    <View key={record.id} style={s.accordionWrapper}>
                         {/* Accordion Header */}
                         <Pressable
-                            onPress={() => toggle(c.id)}
+                            onPress={() => toggle(record.id)}
                             style={[
                                 s.consultationItem,
                                 isOpen && s.consultationItemActive,
                             ]}
                         >
                             <View style={s.consultationItemLeft}>
-                                <Text style={s.consultationDiagnosis}>{c.diagnosis}</Text>
-                                <Text style={s.consultationDate}>{c.date}</Text>
+                                <Text style={s.consultationDiagnosis}>{record.diagnosis}</Text>
+                                <Text style={s.consultationDate}>{formatRecordDate(record.created_at)}</Text>
                             </View>
                             <View style={s.rxBadge}>
-                                <Text style={s.rxBadgeText}>{c.prescriptions.length} Rx</Text>
+                                <Text style={s.rxBadgeText}>{record.prescriptions.length} Rx</Text>
                             </View>
                         </Pressable>
 
@@ -233,19 +176,19 @@ function HistoryTab() {
                                 <View style={s.vitalsGrid}>
                                     <View style={s.vitalItem}>
                                         <Feather name="heart" size={14} color="#EF4444" />
-                                        <Text style={s.vitalText}>BP: {c.vitals.bp}</Text>
+                                        <Text style={s.vitalText}>BP: {vitals.bp}</Text>
                                     </View>
                                     <View style={s.vitalItem}>
                                         <Feather name="activity" size={14} color="#EC4899" />
-                                        <Text style={s.vitalText}>Pulse: {c.vitals.pulse}</Text>
+                                        <Text style={s.vitalText}>Pulse: {vitals.pulse}</Text>
                                     </View>
                                     <View style={s.vitalItem}>
                                         <Feather name="thermometer" size={14} color="#F97316" />
-                                        <Text style={s.vitalText}>Temp: {c.vitals.temp}</Text>
+                                        <Text style={s.vitalText}>Temp: {vitals.temp}</Text>
                                     </View>
                                     <View style={s.vitalItem}>
                                         <Feather name="trending-up" size={14} color="#3B82F6" />
-                                        <Text style={s.vitalText}>Weight: {c.vitals.weight}</Text>
+                                        <Text style={s.vitalText}>Weight: {vitals.weight}</Text>
                                     </View>
                                 </View>
 
@@ -253,15 +196,15 @@ function HistoryTab() {
 
                                 {/* Symptoms */}
                                 <Text style={[s.detailSectionLabel, { marginTop: 0 }]}>Symptoms</Text>
-                                <Text style={s.detailBody}>{c.symptoms}</Text>
+                                <Text style={s.detailBody}>{record.symptoms ?? '—'}</Text>
 
                                 {/* Treatment */}
                                 <Text style={s.detailSectionLabel}>Treatment</Text>
-                                <Text style={s.detailBody}>{c.treatment}</Text>
+                                <Text style={s.detailBody}>{record.treatment ?? '—'}</Text>
 
                                 {/* Prescriptions */}
                                 <Text style={s.detailSectionLabel}>Prescriptions</Text>
-                                {c.prescriptions.map((rx, i) => (
+                                {rxStrings.map((rx, i) => (
                                     <View key={i} style={s.rxRow}>
                                         <Feather name="package" size={13} color={doctorColors.primary} />
                                         <Text style={s.rxText}>{rx}</Text>
@@ -269,11 +212,11 @@ function HistoryTab() {
                                 ))}
 
                                 {/* Follow-up */}
-                                {c.followUp && (
+                                {record.follow_up_date && (
                                     <View style={s.followUpBanner}>
                                         <Feather name="clock" size={14} color="#92400E" />
                                         <Text style={s.followUpText}>
-                                            Follow-up scheduled: {c.followUp}
+                                            Follow-up scheduled: {formatRecordDate(record.follow_up_date)}
                                         </Text>
                                     </View>
                                 )}
@@ -288,19 +231,17 @@ function HistoryTab() {
 
 // ─── Tab: Patient Profile ───────────────────────────────────────────────────
 
-function ProfileTab({ patient }: { patient: MockPatient }) {
-    const profile = MOCK_PROFILE;
-
+function ProfileTab({ patient }: { patient: RealPatientProfile }) {
     return (
         <View>
             {/* Personal Information */}
             <Text style={s.sectionLabel}>Personal Information</Text>
             <View style={s.infoCard}>
-                <InfoRow icon="user" label="Full Name" value={patient.name} />
-                <InfoRow icon="calendar" label="Date of Birth" value={profile.dateOfBirth} />
-                <InfoRow icon="phone" label="Phone" value={profile.phone} />
-                <InfoRow icon="map-pin" label="Address" value={profile.address} />
-                <InfoRow icon="droplet" label="Blood Group" value={profile.bloodGroup} />
+                <InfoRow icon="user" label="Full Name" value={patient.full_name} />
+                <InfoRow icon="calendar" label="Date of Birth" value={patient.date_of_birth ?? '—'} />
+                <InfoRow icon="phone" label="Phone" value={patient.whatsapp_number ?? '—'} />
+                <InfoRow icon="map-pin" label="Address" value={patient.address ?? '—'} />
+                <InfoRow icon="droplet" label="Blood Group" value={patient.blood_group ?? '—'} />
             </View>
 
             {/* Medical Information */}
@@ -315,8 +256,8 @@ function ProfileTab({ patient }: { patient: MockPatient }) {
                     <Text style={s.medicalBlockTitle}>Known Allergies</Text>
                 </View>
                 <View style={s.badgeRow}>
-                    {profile.allergies.length > 0 ? (
-                        profile.allergies.map((a) => (
+                    {(patient.allergies?.length ?? 0) > 0 ? (
+                        patient.allergies!.map((a) => (
                             <Badge key={a} label={a} variant="danger" />
                         ))
                     ) : (
@@ -332,8 +273,8 @@ function ProfileTab({ patient }: { patient: MockPatient }) {
                     <Text style={s.medicalBlockTitle}>Existing Conditions</Text>
                 </View>
                 <View style={s.badgeRow}>
-                    {profile.existingConditions.length > 0 ? (
-                        profile.existingConditions.map((c) => (
+                    {(patient.existing_conditions?.length ?? 0) > 0 ? (
+                        patient.existing_conditions!.map((c) => (
                             <Badge key={c} label={c} variant="info" />
                         ))
                     ) : (
@@ -346,8 +287,8 @@ function ProfileTab({ patient }: { patient: MockPatient }) {
             <View style={s.medicalBlock}>
                 <Text style={s.medicalBlockTitle}>Emergency Contact</Text>
                 <View style={s.emergencyCard}>
-                    <Text style={s.emergencyName}>{profile.emergencyContact.name}</Text>
-                    <Text style={s.emergencyPhone}>{profile.emergencyContact.phone}</Text>
+                    <Text style={s.emergencyName}>{patient.emergency_contact_name ?? '—'}</Text>
+                    <Text style={s.emergencyPhone}>{patient.emergency_contact_phone ?? '—'}</Text>
                 </View>
             </View>
         </View>
@@ -356,25 +297,44 @@ function ProfileTab({ patient }: { patient: MockPatient }) {
 
 // ─── Tab: Medications ───────────────────────────────────────────────────────
 
-function MedicationsTab() {
+function MedicationsTab({ records }: { records: MedicalRecord[] }) {
+    const allRx = records.flatMap((r) =>
+        r.prescriptions.map((p) => ({
+            key: `${r.id}-${p.id}`,
+            label: getPrescriptionStrings({ ...r, prescriptions: [p] })[0],
+            date: formatRecordDate(r.created_at),
+            diagnosis: r.diagnosis,
+        })),
+    );
+
+    if (allRx.length === 0) {
+        return (
+            <View>
+                <Text style={s.sectionLabel}>Current & Past Medications</Text>
+                <View style={{ alignItems: 'center', paddingVertical: spacing['3xl'] }}>
+                    <Feather name="package" size={32} color={doctorColors.textMuted} />
+                    <Text style={{ ...typography.size.sm, color: doctorColors.textMuted, marginTop: spacing.md }}>No medications prescribed yet</Text>
+                </View>
+            </View>
+        );
+    }
+
     return (
         <View>
             <Text style={s.sectionLabel}>Current & Past Medications</Text>
-            {mockConsultations.flatMap((c) =>
-                c.prescriptions.map((rx, idx) => (
-                    <View key={`${c.id}-${idx}`} style={s.medicationRow}>
-                        <View style={s.medicationIcon}>
-                            <Feather name="package" size={18} color={doctorColors.primary} />
-                        </View>
-                        <View style={s.medicationInfo}>
-                            <Text style={s.medicationName}>{rx}</Text>
-                            <Text style={s.medicationMeta}>
-                                Prescribed on {c.date} for {c.diagnosis}
-                            </Text>
-                        </View>
+            {allRx.map((rx) => (
+                <View key={rx.key} style={s.medicationRow}>
+                    <View style={s.medicationIcon}>
+                        <Feather name="package" size={18} color={doctorColors.primary} />
                     </View>
-                )),
-            )}
+                    <View style={s.medicationInfo}>
+                        <Text style={s.medicationName}>{rx.label}</Text>
+                        <Text style={s.medicationMeta}>
+                            Prescribed on {rx.date} for {rx.diagnosis}
+                        </Text>
+                    </View>
+                </View>
+            ))}
         </View>
     );
 }
@@ -385,10 +345,24 @@ export default function PatientChartModal({ visible, patient, onClose, onNewPres
     const insets = useSafeAreaInsets();
     const { panHandlers, animatedStyle } = useSwipeDown(onClose);
     const [activeTab, setActiveTab] = useState<TabId>('history');
+    const { token } = useAuth();
+    const [records, setRecords] = useState<MedicalRecord[]>([]);
+    const [loadingRecords, setLoadingRecords] = useState(false);
+
+    // Fetch records when modal opens
+    useEffect(() => {
+        if (visible && patient && token) {
+            setLoadingRecords(true);
+            getPatientRecords(token, patient.id)
+                .then(setRecords)
+                .catch(() => setRecords([]))
+                .finally(() => setLoadingRecords(false));
+        }
+    }, [visible, patient, token]);
 
     if (!patient) return null;
 
-    const avatarBg = getAvatarColor(patient.name);
+    const avatarBg = getAvatarColor(patient.full_name);
 
     return (
         <Modal
@@ -414,9 +388,9 @@ export default function PatientChartModal({ visible, patient, onClose, onNewPres
                             <Feather name="user" size={22} color="#374151" />
                         </View>
                         <View style={s.headerText}>
-                            <Text style={s.patientName}>{patient.name}</Text>
+                            <Text style={s.patientName}>{patient.full_name}</Text>
                             <Text style={s.patientSubtitle}>
-                                Patient ID: {patient.id} • {patient.condition}
+                                Patient ID: {patient.id.slice(0, 8)} • {patient.existing_conditions?.join(', ') ?? '—'}
                             </Text>
                         </View>
                     </View>
@@ -451,9 +425,17 @@ export default function PatientChartModal({ visible, patient, onClose, onNewPres
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={s.tabContentInner}
                 >
-                    {activeTab === 'history' && <HistoryTab />}
-                    {activeTab === 'profile' && <ProfileTab patient={patient} />}
-                    {activeTab === 'medications' && <MedicationsTab />}
+                    {loadingRecords ? (
+                        <View style={{ alignItems: 'center', paddingVertical: spacing['3xl'] }}>
+                            <ActivityIndicator size="large" color={doctorColors.primary} />
+                        </View>
+                    ) : (
+                        <>
+                            {activeTab === 'history' && <HistoryTab records={records} />}
+                            {activeTab === 'profile' && <ProfileTab patient={patient} />}
+                            {activeTab === 'medications' && <MedicationsTab records={records} />}
+                        </>
+                    )}
                 </ScrollView>
 
                 {/* Footer (matching web) */}

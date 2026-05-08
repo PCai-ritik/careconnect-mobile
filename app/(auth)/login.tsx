@@ -41,7 +41,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { useAuth } from '@/hooks/useAuth';
-import { loginPatient, loginDoctor } from '@/services/auth';
+import { loginCaregiver, loginDoctor } from '@/services/auth';
 import {
     patientColors,
     doctorColors,
@@ -57,7 +57,7 @@ const SCREEN_WIDTH = Dimensions.get('window').width;
 const ANIM_DURATION = 350;
 const ANIM_CONFIG = { duration: ANIM_DURATION, easing: Easing.out(Easing.cubic) };
 
-type Role = 'patient' | 'doctor';
+type Role = 'caregiver' | 'doctor';
 
 // ─── Validation ─────────────────────────────────────────────────────────────
 
@@ -67,7 +67,7 @@ const passwordSchema = z.string().min(6, 'Password must be at least 6 characters
 // ─── Role Config ────────────────────────────────────────────────────────────
 
 const ROLE_CONFIG = {
-    patient: {
+    caregiver: {
         colors: patientColors,
         icon: 'video' as const,
         title: 'CareConnect',
@@ -83,7 +83,7 @@ const ROLE_CONFIG = {
         title: 'CareConnect',
         subtitle: 'for Doctors',
         tagline: 'Empowering Doctors, Connecting Patients',
-        switchLabel: 'Are you a patient? ',
+        switchLabel: 'Are you a caregiver? ',
         switchAction: 'Sign in here',
         registerHref: '/(auth)/doctor-register' as Href,
     },
@@ -96,8 +96,8 @@ export default function LoginScreen() {
     const params = useLocalSearchParams<{ role?: string }>();
     const { login } = useAuth();
 
-    // Always start as patient; deep-link `?role=doctor` handled via effect
-    const [role, setRole] = useState<Role>('patient');
+    // Always start as caregiver; deep-link `?role=doctor` handled via effect
+    const [role, setRole] = useState<Role>('caregiver');
     const [isAnimating, setIsAnimating] = useState(false);
 
     // Form state
@@ -127,9 +127,9 @@ export default function LoginScreen() {
     const switchRole = useCallback(() => {
         if (isAnimating || loading) return;
 
-        const nextRole: Role = role === 'patient' ? 'doctor' : 'patient';
-        const slideOut = role === 'patient' ? -SCREEN_WIDTH : SCREEN_WIDTH;
-        const slideIn = role === 'patient' ? SCREEN_WIDTH : -SCREEN_WIDTH;
+        const nextRole: Role = role === 'caregiver' ? 'doctor' : 'caregiver';
+        const slideOut = role === 'caregiver' ? -SCREEN_WIDTH : SCREEN_WIDTH;
+        const slideIn = role === 'caregiver' ? SCREEN_WIDTH : -SCREEN_WIDTH;
 
         setIsAnimating(true);
 
@@ -218,7 +218,7 @@ export default function LoginScreen() {
         setLoading(true);
 
         try {
-            const loginFn = role === 'patient' ? loginPatient : loginDoctor;
+            const loginFn = role === 'caregiver' ? loginCaregiver : loginDoctor;
             const response = await loginFn({ email, password });
             await login(response);
         } catch (error: unknown) {
@@ -249,7 +249,7 @@ export default function LoginScreen() {
 
                         {/* ── Logo & Tagline (animated color) ─────────── */}
                         <Animated.View style={[styles.logoContainer, animatedSlide]}>
-                            {role === 'patient' ? (
+                            {role === 'caregiver' ? (
                                 <Image
                                     source={require('@/assets/images/stethescope.png')}
                                     style={styles.logoImage}

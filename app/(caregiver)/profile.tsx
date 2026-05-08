@@ -1,13 +1,4 @@
-/**
- * CareConnect — Patient Profile
- *
- * Settings screen with avatar (user icon), editable name/email fields,
- * Save button (with success modal), and logout (with confirmation modal).
- *
- * Uses patientColors tokens + StyleSheet.create(). No Nativewind.
- */
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -15,6 +6,7 @@ import {
     ScrollView,
     TextInput,
     StyleSheet,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -26,22 +18,44 @@ import {
     radii,
 } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { getMe } from '@/services/caregiver';
 import PatientThemedAlert from '@/components/patient/PatientThemedAlert';
 
 export default function ProfileScreen() {
     const router = useRouter();
-    const { logout } = useAuth();
-    const [name, setName] = useState('Ananya Sharma');
-    const [email, setEmail] = useState('ananya@example.com');
+    const { token, logout } = useAuth();
+    const [name, setName] = useState('');
+    const [email, setEmail] = useState('');
+    const [loading, setLoading] = useState(true);
 
     // Modal states
     const [showSaveSuccess, setShowSaveSuccess] = useState(false);
     const [showLogoutAlert, setShowLogoutAlert] = useState(false);
 
+    // Fetch real profile on mount
+    useEffect(() => {
+        if (!token) return;
+        getMe(token)
+            .then((me) => {
+                setName(me.full_name);
+                setEmail(me.email);
+            })
+            .catch(() => { /* keep blank defaults */ })
+            .finally(() => setLoading(false));
+    }, [token]);
+
     const handleSave = () => {
-        // In a real app, save to API here
+        // TODO: Wire to PATCH /auth/me once backend route exists
         setShowSaveSuccess(true);
     };
+
+    if (loading) {
+        return (
+            <SafeAreaView style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
+                <ActivityIndicator size="large" color={patientColors.primary} />
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container}>
@@ -60,7 +74,7 @@ export default function ProfileScreen() {
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* ── Avatar ── */}
                 <View style={styles.avatarSection}>
-                    <View style={styles.avatarCircle}>
+                    <View style={[styles.avatarCircle, { backgroundColor: getAvatarColor(name || 'User') }]}>
                         <Feather name="user" size={40} color="#374151" />
                     </View>
                     <Pressable style={({ pressed }) => [styles.changePicBtn, pressed && { opacity: 0.8 }]}>
@@ -121,7 +135,7 @@ export default function ProfileScreen() {
                 confirmLabel="Back to Dashboard"
                 onConfirm={() => {
                     setShowSaveSuccess(false);
-                    router.replace('/(patient)');
+                    router.replace('/(caregiver)');
                 }}
             />
 
@@ -183,7 +197,6 @@ const styles = StyleSheet.create({
     avatarSection: { alignItems: 'center', marginVertical: spacing['2xl'] },
     avatarCircle: {
         width: 96, height: 96, borderRadius: 48,
-        backgroundColor: getAvatarColor('Ananya Sharma'),
         alignItems: 'center', justifyContent: 'center',
         marginBottom: spacing.md,
     },

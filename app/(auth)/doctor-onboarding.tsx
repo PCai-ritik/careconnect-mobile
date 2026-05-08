@@ -30,6 +30,7 @@ import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 
 import { useAuth } from '@/hooks/useAuth';
+import { submitDoctorOnboarding, submitDoctorAvailability } from '@/services/doctor';
 import {
     doctorColors,
     spacing,
@@ -160,6 +161,7 @@ const defaultSchedule: Record<string, DaySchedule> = DAYS.reduce((acc, day) => (
 
 export default function DoctorOnboardingScreen() {
     const router = useRouter();
+    const { login } = useAuth();
     const scrollRef = useRef<ScrollView>(null);
 
     const [currentStep, setCurrentStep] = useState(0);
@@ -317,37 +319,65 @@ export default function DoctorOnboardingScreen() {
         if (!allConsentsAccepted) return;
         setIsSubmitting(true);
 
-        const payload = {
-            verification: {
-                licenseNumber: verification.licenseNumber,
-                licenseState: verification.licenseState,
-                hospitalAffiliation: verification.hospitalAffiliation,
+        try {
+            // 1. Read the token stored during registration
+            const SecureStore = await import('expo-secure-store');
+            const token = await SecureStore.getItemAsync('careconnect_onboarding_token');
+            const userJson = await SecureStore.getItemAsync('careconnect_onboarding_user');
+
+            if (!token || !userJson) {
+                Alert.alert('Session Expired', 'Please register again.');
+                router.replace('/(auth)/doctor-register');
+                return;
+            }
+
+            // 2. Submit onboarding profile data → PUT /doctors/onboarding
+            const durationNum = parseInt(availability.consultationDuration) || 30;
+            const feeNum = parseFloat(payments.consultationFee) || 0;
+
+            await submitDoctorOnboarding(token, {
+                specialization: verification.specialization,
+                years_of_experience: verification.experience,
+                license_number: verification.licenseNumber,
+                hospital_affiliation: verification.hospitalAffiliation,
                 bio: verification.bio,
-                documentUri: verification.localDocumentUri,
-            },
-            availability: {
-                schedule: availability.schedule,
-                consultationDuration: availability.consultationDuration,
-            },
-            payments: {
-                consultationFee: payments.consultationFee,
+                consultation_duration_minutes: durationNum,
+                consultation_fee: feeNum,
                 currency: payments.currency,
-                bankName: payments.bankName,
-                accountNumber: payments.accountNumber,
-                routingNumber: payments.routingNumber,
-                termsAccepted: payments.termsAccepted,
-                hipaaAccepted: payments.hipaaAccepted,
-                privacyAccepted: payments.privacyAccepted,
-            },
-        };
+                accepted_payment_methods: payments.acceptedPaymentMethods,
+            });
 
-        console.log('[Mock Onboarding] Complete doctor onboarding payload:', JSON.stringify(payload, null, 2));
+            // 3. Submit availability schedule → PUT /doctors/availability
+            // Transform Record<string, DaySchedule> → DoctorAvailabilitySlot[]
+            const slots = Object.entries(availability.schedule).map(([day, sched]) => ({
+                day_of_week: day.toUpperCase(),
+                start_time: `${sched.startTime}:00`,    // HH:MM → HH:MM:SS
+                end_time: `${sched.endTime}:00`,
+                is_enabled: sched.enabled,
+            }));
 
-        // Simulate network delay
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+            await submitDoctorAvailability(token, slots);
 
-        setIsSubmitting(false);
-        setShowCompleteModal(true);
+            // 4. Clean up onboarding tokens
+            await SecureStore.deleteItemAsync('careconnect_onboarding_token');
+            await SecureStore.deleteItemAsync('careconnect_onboarding_user');
+
+            // 5. Authenticate — this triggers the auth layout redirect to /(doctor)
+            const userData = JSON.parse(userJson);
+            await login({
+                access_token: token,
+                token_type: 'bearer',
+                user_id: userData.user_id,
+                role: userData.role,
+            });
+
+            setIsSubmitting(false);
+            setShowCompleteModal(true);
+        } catch (error: unknown) {
+            setIsSubmitting(false);
+            const message = error instanceof Error ? error.message : 'Failed to complete onboarding. Please try again.';
+            Alert.alert('Onboarding Failed', message);
+        }
     };
 
     // -- Render --
@@ -368,7 +398,7 @@ export default function DoctorOnboardingScreen() {
                         </View>
                         <Text style={styles.modalTitle}>Welcome aboard!</Text>
                         <Text style={styles.modalBody}>
-                            Your doctor profile has been set up successfully. You can now sign in to start consulting.
+                            Your doctor profile has been set up successfully. Let&apos;s get started!
                         </Text>
                         <Pressable
                             style={({ pressed }) => [
@@ -377,7 +407,7 @@ export default function DoctorOnboardingScreen() {
                             ]}
                             onPress={() => {
                                 setShowCompleteModal(false);
-                                router.replace('/(auth)/login?role=doctor');
+                                router.replace('/(doctor)');
                             }}
                         >
                             <Text style={styles.modalButtonText}>Continue</Text>

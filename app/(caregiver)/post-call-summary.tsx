@@ -42,7 +42,7 @@ export default function PostCallSummaryScreen() {
     const data = mockPostCallSummary;
 
     const goHome = () => {
-        router.replace('/(patient)' as any);
+        router.replace('/(caregiver)' as any);
     };
 
     return (

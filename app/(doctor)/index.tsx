@@ -5,9 +5,9 @@
  * schedule and quick actions over vanity stats.
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator, RefreshControl, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -18,30 +18,21 @@ import {
     shadows,
     radii,
 } from '@/constants/theme';
-import {
-    mockDoctorAppointments,
-    mockRecentPatients,
-    DoctorAppointment,
-    MockPatient,
-} from '@/services/mock-data';
+import { useAuth } from '@/hooks/useAuth';
+import { getDoctorProfile, getAppointments, getPatients, startVideoSession, getJoinToken } from '@/services/doctor';
+import type { DoctorProfile, Appointment, PatientProfile } from '@/services/types';
 import PatientChartModal from '@/components/doctor/PatientChartModal';
 import NewPrescriptionModal from '@/components/doctor/NewPrescriptionModal';
 import AvailabilityModal from '@/components/doctor/AvailabilityModal';
 import ActivityHistoryModal from '@/components/doctor/ActivityHistoryModal';
 import AddPatientModal from '@/components/doctor/AddPatientModal';
+import SmartJoinButton from '@/components/SmartJoinButton';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-// Muted, professional background colors for the silhouette circles
 const AVATAR_COLORS = [
-    '#C7D2FE', // indigo-200
-    '#A5B4FC', // indigo-300
-    '#BAE6FD', // sky-200
-    '#99F6E4', // teal-200
-    '#D9F99D', // lime-200
-    '#FDE68A', // amber-200
-    '#FECACA', // red-200
-    '#DDD6FE', // violet-200
+    '#C7D2FE', '#A5B4FC', '#BAE6FD', '#99F6E4',
+    '#D9F99D', '#FDE68A', '#FECACA', '#DDD6FE',
 ];
 
 const getAvatarColor = (name: string): string => {
@@ -52,13 +43,38 @@ const getAvatarColor = (name: string): string => {
     return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 };
 
-const nextAppointment = mockDoctorAppointments.find(
-    (a) => a.status === 'upcoming',
-);
+/** Enriched appointment with resolved patient name for display */
+interface DisplayAppointment extends Appointment {
+    patientName: string;
+    displayTime: string;
+    displayType: string;
+}
 
-const scheduleAppointments = mockDoctorAppointments.filter(
-    (a) => a.id !== nextAppointment?.id,
-);
+/** Map real Appointment → DisplayAppointment by cross-referencing patients */
+function enrichAppointments(
+    appointments: Appointment[],
+    patients: PatientProfile[],
+): DisplayAppointment[] {
+    const patientMap = new Map(patients.map((p) => [p.id, p.full_name]));
+    return appointments.map((a) => ({
+        ...a,
+        patientName: patientMap.get(a.patient_id) ?? 'Unknown Patient',
+        displayTime: new Date(a.scheduled_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        displayType: a.appointment_type === 'VIDEO' ? 'Video Consultation'
+            : a.appointment_type === 'FOLLOW_UP' ? 'Follow-up'
+                : a.appointment_type === 'NEW_PATIENT' ? 'New Patient'
+                    : 'In-Person',
+    }));
+}
+
+/** Check if appointment is today */
+function isToday(dateStr: string): boolean {
+    const d = new Date(dateStr);
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate();
+}
 
 // ─── Quick Action Data ──────────────────────────────────────────────────────
 
@@ -95,7 +111,7 @@ function Avatar({ name, size = 44 }: { name: string; size?: number }) {
     );
 }
 
-function HeroCard({ appointment, onStartCall }: { appointment: DoctorAppointment; onStartCall: () => void }) {
+function HeroCard({ appointment, onStartCall, onShare }: { appointment: DisplayAppointment; onStartCall: () => void; onShare: () => void }) {
     return (
         <View style={styles.heroCard}>
             <Text style={styles.heroLabel}>NEXT APPOINTMENT</Text>
@@ -104,20 +120,28 @@ function HeroCard({ appointment, onStartCall }: { appointment: DoctorAppointment
                 <View style={styles.heroInfo}>
                     <Text style={styles.heroPatient}>{appointment.patientName}</Text>
                     <Text style={styles.heroMeta}>
-                        {appointment.time}  •  {appointment.type}
+                        {appointment.displayTime}  •  {appointment.displayType}
                     </Text>
                 </View>
             </View>
-            <Pressable
-                style={({ pressed }) => [
-                    styles.heroCta,
-                    pressed && styles.heroCtaPressed,
-                ]}
-                onPress={onStartCall}
-            >
-                <Feather name="video" size={18} color="#fff" />
-                <Text style={styles.heroCtaText}>Start Video Call</Text>
-            </Pressable>
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                <Pressable
+                    style={({ pressed }) => [
+                        styles.heroShareBtn,
+                        pressed && { opacity: 0.7 },
+                    ]}
+                    onPress={onShare}
+                >
+                    <Feather name="share-2" size={18} color={doctorColors.primary} />
+                </Pressable>
+                <SmartJoinButton
+                    scheduledTime={appointment.scheduled_time}
+                    durationMinutes={appointment.duration_minutes || 30}
+                    role="doctor"
+                    onPress={onStartCall}
+                    style={{ flex: 1 }}
+                />
+            </View>
         </View>
     );
 }
@@ -139,7 +163,7 @@ function ActionPill({ action, onPress }: { action: QuickAction; onPress?: () => 
     );
 }
 
-function ScheduleRow({ appointment, onPress, onJoin }: { appointment: DoctorAppointment; onPress: () => void; onJoin: () => void }) {
+function ScheduleRow({ appointment, onPress, onJoin, onShare }: { appointment: DisplayAppointment; onPress: () => void; onJoin: () => void; onShare: () => void }) {
     return (
         <Pressable
             style={({ pressed }) => [
@@ -152,24 +176,31 @@ function ScheduleRow({ appointment, onPress, onJoin }: { appointment: DoctorAppo
             <View style={styles.scheduleInfo}>
                 <Text style={styles.scheduleName}>{appointment.patientName}</Text>
                 <Text style={styles.scheduleMeta}>
-                    {appointment.time}  •  {appointment.type}
+                    {appointment.displayTime}  •  {appointment.displayType}
                 </Text>
             </View>
             <Pressable
                 style={({ pressed }) => [
-                    styles.joinBtn,
+                    styles.shareBtn,
                     pressed && { opacity: 0.7 },
                 ]}
-                onPress={onJoin}
+                onPress={onShare}
             >
-                <Feather name="video" size={14} color={doctorColors.primary} />
-                <Text style={styles.joinBtnText}>Join</Text>
+                <Feather name="share-2" size={14} color={doctorColors.textMuted} />
             </Pressable>
+            <SmartJoinButton
+                scheduledTime={appointment.scheduled_time}
+                durationMinutes={appointment.duration_minutes || 30}
+                role="doctor"
+                size="sm"
+                onPress={onJoin}
+            />
         </Pressable>
     );
 }
 
-function PatientRow({ patient, onPress }: { patient: MockPatient; onPress: () => void }) {
+function PatientRow({ patient, onPress }: { patient: PatientProfile; onPress: () => void }) {
+    const condition = patient.existing_conditions?.join(', ') ?? '—';
     return (
         <Pressable
             style={({ pressed }) => [
@@ -178,12 +209,14 @@ function PatientRow({ patient, onPress }: { patient: MockPatient; onPress: () =>
             ]}
             onPress={onPress}
         >
-            <Avatar name={patient.name} size={40} />
+            <Avatar name={patient.full_name} size={40} />
             <View style={styles.patientInfo}>
-                <Text style={styles.patientName}>{patient.name}</Text>
-                <Text style={styles.patientCondition}>{patient.condition}</Text>
+                <Text style={styles.patientName}>{patient.full_name}</Text>
+                <Text style={styles.patientCondition}>{condition}</Text>
             </View>
-            <Text style={styles.patientLastVisit}>{patient.lastVisit}</Text>
+            <Text style={styles.patientLastVisit}>
+                {new Date(patient.created_at).toLocaleDateString()}
+            </Text>
         </Pressable>
     );
 }
@@ -192,28 +225,94 @@ function PatientRow({ patient, onPress }: { patient: MockPatient; onPress: () =>
 
 export default function DoctorHomeScreen() {
     const router = useRouter();
-    const [selectedPatient, setSelectedPatient] = useState<MockPatient | null>(null);
+    const { token } = useAuth();
+    const [selectedPatient, setSelectedPatient] = useState<PatientProfile | null>(null);
     const [isChartOpen, setIsChartOpen] = useState(false);
     const [isRxOpen, setIsRxOpen] = useState(false);
     const [isAvailabilityOpen, setIsAvailabilityOpen] = useState(false);
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
 
-    const openChart = (patient: MockPatient) => {
+    // Real data from API
+    const [doctorProfile, setDoctorProfile] = useState<DoctorProfile | null>(null);
+    const [appointments, setAppointments] = useState<DisplayAppointment[]>([]);
+    const [patients, setPatients] = useState<PatientProfile[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+
+    const fetchAll = useCallback(async () => {
+        if (!token) return;
+        try {
+            const [profile, rawAppts, rawPatients] = await Promise.all([
+                getDoctorProfile(token),
+                getAppointments(token),
+                getPatients(token),
+            ]);
+            setDoctorProfile(profile);
+            setPatients(rawPatients);
+            setAppointments(enrichAppointments(rawAppts, rawPatients));
+        } catch (e) {
+            console.error('Failed to load dashboard:', e);
+        }
+    }, [token]);
+
+    useEffect(() => {
+        fetchAll().finally(() => setLoading(false));
+    }, [fetchAll]);
+
+    // ── Share to WhatsApp ──
+    const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://careconnect.app';
+
+    const shareToWhatsApp = useCallback(async (appointmentId: string) => {
+        if (!token) return;
+        try {
+            let patientToken: string | undefined;
+            try {
+                const res = await startVideoSession(token, appointmentId);
+                patientToken = res.patient_join_token;
+            } catch {
+                const res = await getJoinToken(token, appointmentId);
+                patientToken = res.patient_join_token;
+            }
+            if (!patientToken) {
+                Alert.alert('Not ready', 'Start the call first to generate a share link.');
+                return;
+            }
+            const joinUrl = `${WEB_URL}/join/${appointmentId}?token=${encodeURIComponent(patientToken)}`;
+            const msg = `Hi! Your CareConnect video consultation is ready.\n\nJoin here: ${joinUrl}`;
+            const waUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+            await Linking.openURL(waUrl);
+        } catch (err: any) {
+            Alert.alert('Share failed', err.message);
+        }
+    }, [token, WEB_URL]);
+
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        await fetchAll();
+        setRefreshing(false);
+    }, [fetchAll]);
+
+    // Derived data
+    const doctorName = doctorProfile?.full_name ?? 'Doctor';
+    const now = new Date();
+    const upcomingAppointments = appointments
+        .filter((a) => new Date(a.scheduled_time) >= now && (a.status === 'CONFIRMED' || a.status === 'IN_PROGRESS'))
+        .sort((a, b) => new Date(a.scheduled_time).getTime() - new Date(b.scheduled_time).getTime());
+    const nextAppointment = upcomingAppointments[0] ?? null;
+    const todaySchedule = appointments
+        .filter((a) => isToday(a.scheduled_time) && a.id !== nextAppointment?.id)
+        .sort((a, b) => new Date(a.scheduled_time).getTime() - new Date(b.scheduled_time).getTime());
+
+    const openChart = (patient: PatientProfile) => {
         setSelectedPatient(patient);
         setIsChartOpen(true);
     };
 
-    // Bridge an appointment to a MockPatient for the chart
-    const openChartFromAppointment = (appt: DoctorAppointment) => {
-        const found = mockRecentPatients.find((p) => p.name === appt.patientName);
-        openChart(found ?? {
-            id: appt.id,
-            name: appt.patientName,
-            condition: appt.type,
-            lastVisit: 'Today',
-            avatar: '',
-        });
+    // Find patient by ID from a DisplayAppointment
+    const openChartFromAppointment = (appt: DisplayAppointment) => {
+        const found = patients.find((p) => p.id === appt.patient_id);
+        if (found) openChart(found);
     };
 
     return (
@@ -221,6 +320,13 @@ export default function DoctorHomeScreen() {
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={doctorColors.primary}
+                    />
+                }
             >
                 {/* ── Header ─────────────────────────────────────────── */}
                 <View style={styles.header}>
@@ -230,97 +336,123 @@ export default function DoctorHomeScreen() {
                         </View>
                         <View>
                             <Text style={styles.greeting}>Welcome,</Text>
-                            <Text style={styles.doctorName}>Dr. Rohan Mehta</Text>
+                            <Text style={styles.doctorName}>{doctorName}</Text>
                         </View>
                     </View>
-                    <Avatar name="Rohan Mehta" size={42} />
+                    <Avatar name={doctorName} size={42} />
                 </View>
 
-                {/* ── Hero Card ───────────────────────────────────────── */}
-                {nextAppointment && (
-                    <HeroCard
-                        appointment={nextAppointment}
-                        onStartCall={() => router.push(`/(doctor)/consultation/${nextAppointment.id}`)}
-                    />
+                {loading ? (
+                    <View style={{ paddingVertical: spacing['6xl'], alignItems: 'center' }}>
+                        <ActivityIndicator size="large" color={doctorColors.primary} />
+                    </View>
+                ) : (
+                    <>
+                        {/* ── Hero Card ───────────────────────────────────────── */}
+                        {nextAppointment && (
+                            <HeroCard
+                                appointment={nextAppointment}
+                                onStartCall={() => router.push(`/(doctor)/consultation/${nextAppointment.id}`)}
+                                onShare={() => shareToWhatsApp(nextAppointment.id)}
+                            />
+                        )}
+
+                        {/* ── Action Toolbox ──────────────────────────────────── */}
+                        <View style={styles.actionsRow}>
+                            {quickActions.map((action) => (
+                                <ActionPill
+                                    key={action.label}
+                                    action={action}
+                                    onPress={
+                                        action.label === 'New Prescription'
+                                            ? () => setIsRxOpen(true)
+                                            : action.label === 'Availability'
+                                                ? () => setIsAvailabilityOpen(true)
+                                                : action.label === 'History'
+                                                    ? () => setIsHistoryOpen(true)
+                                                    : action.label === 'Add Patient'
+                                                        ? () => setIsAddPatientOpen(true)
+                                                        : undefined
+                                    }
+                                />
+                            ))}
+                        </View>
+
+                        {/* ── Today's Schedule ─────────────────────────────────── */}
+                        <View style={styles.section}>
+                            <View style={styles.sectionHeader}>
+                                <Text style={styles.sectionTitle}>Today&apos;s Schedule</Text>
+                                {todaySchedule.length > 5 && (
+                                    <Pressable
+                                        onPress={() => router.push('/(doctor)/appointments')}
+                                        style={({ pressed }) => [pressed && { opacity: 0.6 }]}
+                                    >
+                                        <Text style={styles.showMore}>Show More</Text>
+                                    </Pressable>
+                                )}
+                            </View>
+                            <View style={styles.card}>
+                                {todaySchedule.length === 0 ? (
+                                    <View style={{ padding: spacing.xl, alignItems: 'center' }}>
+                                        <Text style={{ color: doctorColors.textMuted, fontFamily: typography.fontFamily.regular }}>
+                                            No other appointments today
+                                        </Text>
+                                    </View>
+                                ) : (
+                                    todaySchedule.slice(0, 5).map((appt, idx, arr) => (
+                                        <View key={appt.id}>
+                                            <ScheduleRow
+                                                appointment={appt}
+                                                onPress={() => openChartFromAppointment(appt)}
+                                                onJoin={() => router.push(`/(doctor)/consultation/${appt.id}`)}
+                                                onShare={() => shareToWhatsApp(appt.id)}
+                                            />
+                                            {idx < arr.length - 1 && (
+                                                <View style={styles.divider} />
+                                            )}
+                                        </View>
+                                    ))
+                                )}
+                            </View>
+                        </View>
+
+                        {/* ── Recent Patients ──────────────────────────────────── */}
+                        <View style={styles.section}>
+                            <View style={styles.sectionHeader}>
+                                <Text style={styles.sectionTitle}>Recent Patients</Text>
+                                {patients.length > 5 && (
+                                    <Pressable
+                                        onPress={() => router.push('/(doctor)/patients')}
+                                        style={({ pressed }) => [pressed && { opacity: 0.6 }]}
+                                    >
+                                        <Text style={styles.showMore}>Show More</Text>
+                                    </Pressable>
+                                )}
+                            </View>
+                            <View style={styles.card}>
+                                {patients.length === 0 ? (
+                                    <View style={{ padding: spacing.xl, alignItems: 'center' }}>
+                                        <Text style={{ color: doctorColors.textMuted, fontFamily: typography.fontFamily.regular }}>
+                                            No patients yet
+                                        </Text>
+                                    </View>
+                                ) : (
+                                    patients.slice(0, 5).map((patient, idx, arr) => (
+                                        <View key={patient.id}>
+                                            <PatientRow
+                                                patient={patient}
+                                                onPress={() => openChart(patient)}
+                                            />
+                                            {idx < arr.length - 1 && (
+                                                <View style={styles.divider} />
+                                            )}
+                                        </View>
+                                    ))
+                                )}
+                            </View>
+                        </View>
+                    </>
                 )}
-
-                {/* ── Action Toolbox ──────────────────────────────────── */}
-                <View style={styles.actionsRow}>
-                    {quickActions.map((action) => (
-                        <ActionPill
-                            key={action.label}
-                            action={action}
-                            onPress={
-                                action.label === 'New Prescription'
-                                    ? () => setIsRxOpen(true)
-                                    : action.label === 'Availability'
-                                        ? () => setIsAvailabilityOpen(true)
-                                        : action.label === 'History'
-                                            ? () => setIsHistoryOpen(true)
-                                            : action.label === 'Add Patient'
-                                                ? () => setIsAddPatientOpen(true)
-                                                : undefined
-                            }
-                        />
-                    ))}
-                </View>
-
-                {/* ── Today's Schedule ─────────────────────────────────── */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Today's Schedule</Text>
-                        {scheduleAppointments.length > 5 && (
-                            <Pressable
-                                onPress={() => router.push('/(doctor)/appointments')}
-                                style={({ pressed }) => [pressed && { opacity: 0.6 }]}
-                            >
-                                <Text style={styles.showMore}>Show More</Text>
-                            </Pressable>
-                        )}
-                    </View>
-                    <View style={styles.card}>
-                        {scheduleAppointments.slice(0, 5).map((appt, idx, arr) => (
-                            <View key={appt.id}>
-                                <ScheduleRow
-                                    appointment={appt}
-                                    onPress={() => openChartFromAppointment(appt)}
-                                    onJoin={() => router.push(`/(doctor)/consultation/${appt.id}`)}
-                                />
-                                {idx < arr.length - 1 && (
-                                    <View style={styles.divider} />
-                                )}
-                            </View>
-                        ))}
-                    </View>
-                </View>
-
-                {/* ── Recent Patients ──────────────────────────────────── */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Recent Patients</Text>
-                        {mockRecentPatients.length > 5 && (
-                            <Pressable
-                                onPress={() => router.push('/(doctor)/patients')}
-                                style={({ pressed }) => [pressed && { opacity: 0.6 }]}
-                            >
-                                <Text style={styles.showMore}>Show More</Text>
-                            </Pressable>
-                        )}
-                    </View>
-                    <View style={styles.card}>
-                        {mockRecentPatients.slice(0, 5).map((patient, idx, arr) => (
-                            <View key={patient.id}>
-                                <PatientRow
-                                    patient={patient}
-                                    onPress={() => openChart(patient)}
-                                />
-                                {idx < arr.length - 1 && (
-                                    <View style={styles.divider} />
-                                )}
-                            </View>
-                        ))}
-                    </View>
-                </View>
             </ScrollView>
 
             <PatientChartModal
@@ -335,10 +467,17 @@ export default function DoctorHomeScreen() {
             <NewPrescriptionModal
                 visible={isRxOpen}
                 onClose={() => setIsRxOpen(false)}
+                patientId={selectedPatient?.id}
+                patientName={selectedPatient?.full_name ?? ''}
+                patientAge={selectedPatient?.date_of_birth ?? ''}
+                patientGender={selectedPatient?.gender ?? ''}
+                onPrescriptionCreated={fetchAll}
             />
             <AvailabilityModal
                 visible={isAvailabilityOpen}
                 onClose={() => setIsAvailabilityOpen(false)}
+                profile={doctorProfile}
+                onSaved={fetchAll}
             />
             <ActivityHistoryModal
                 visible={isHistoryOpen}
@@ -347,6 +486,7 @@ export default function DoctorHomeScreen() {
             <AddPatientModal
                 visible={isAddPatientOpen}
                 onClose={() => setIsAddPatientOpen(false)}
+                onPatientAdded={fetchAll}
             />
         </SafeAreaView>
     );
@@ -448,6 +588,15 @@ const styles = StyleSheet.create({
         borderRadius: radii.md,
         paddingVertical: spacing.md,
     },
+    heroShareBtn: {
+        width: 48,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: radii.md,
+        borderWidth: 1,
+        borderColor: doctorColors.border,
+        backgroundColor: doctorColors.surface,
+    },
     heroCtaPressed: {
         backgroundColor: doctorColors.primaryDark,
     },
@@ -536,6 +685,16 @@ const styles = StyleSheet.create({
         ...typography.size.sm,
         color: doctorColors.textMuted,
         marginTop: spacing.xxs,
+    },
+    shareBtn: {
+        width: 34,
+        height: 34,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: radii.sm,
+        borderWidth: 1,
+        borderColor: doctorColors.border,
+        backgroundColor: doctorColors.surface,
     },
     joinBtn: {
         flexDirection: 'row',

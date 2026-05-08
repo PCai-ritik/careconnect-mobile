@@ -1,9 +1,9 @@
 /**
- * CareConnect -- Patient Registration Screen
+ * CareConnect -- Caregiver Registration Screen
  *
- * Collects Name, Email, Password. No onboarding steps.
- * Uses Patient theme (teal-green).
- * On submit: mock register, console.log payload, redirect to app.
+ * Collects Name, Email, Password, WhatsApp Number.
+ * Uses Caregiver theme (teal-green).
+ * On submit: register caregiver, redirect to app.
  */
 
 import { useState } from 'react';
@@ -25,7 +25,7 @@ import { Feather } from '@expo/vector-icons';
 import { z } from 'zod';
 
 import { useAuth } from '@/hooks/useAuth';
-import { registerPatient } from '@/services/auth';
+import { registerCaregiver } from '@/services/auth';
 import {
     patientColors,
     spacing,
@@ -39,19 +39,21 @@ import {
 const nameSchema = z.string().min(2, 'Name must be at least 2 characters');
 const emailSchema = z.string().email('Please enter a valid email address');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
+const whatsappSchema = z.string().min(10, 'Please enter a valid WhatsApp number');
 
 // -- Component --
 
-export default function PatientRegisterScreen() {
+export default function CaregiverRegisterScreen() {
     const router = useRouter();
     const { login } = useAuth();
 
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [whatsappNumber, setWhatsappNumber] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [errors, setErrors] = useState<{ fullName?: string; email?: string; password?: string }>({});
+    const [errors, setErrors] = useState<{ fullName?: string; email?: string; password?: string; whatsapp?: string }>({});
 
     const validateForm = (): boolean => {
         const newErrors: typeof errors = {};
@@ -65,6 +67,9 @@ export default function PatientRegisterScreen() {
         const passwordResult = passwordSchema.safeParse(password);
         if (!passwordResult.success) newErrors.password = passwordResult.error.issues[0].message;
 
+        const whatsappResult = whatsappSchema.safeParse(whatsappNumber);
+        if (!whatsappResult.success) newErrors.whatsapp = whatsappResult.error.issues[0].message;
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -74,7 +79,13 @@ export default function PatientRegisterScreen() {
         setLoading(true);
 
         try {
-            const response = await registerPatient({ fullName, email, password });
+            const response = await registerCaregiver({
+                fullName,
+                email,
+                password,
+                hospitalId: '',   // Defaults to CareConnect hospital on backend
+                whatsappNumber,
+            });
             await login(response);
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Registration failed. Please try again.';
@@ -108,7 +119,7 @@ export default function PatientRegisterScreen() {
                             <Feather name="video" size={28} color="#FFFFFF" />
                         </View>
                         <Text style={styles.logoText}>CareConnect</Text>
-                        <Text style={styles.tagline}>Create your patient account</Text>
+                        <Text style={styles.tagline}>Create your caregiver account</Text>
                     </View>
 
                     {/* Flex spacer pushes form to bottom */}
@@ -184,6 +195,27 @@ export default function PatientRegisterScreen() {
                             {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
                         </View>
 
+                        {/* WhatsApp Number */}
+                        <View style={styles.fieldGroup}>
+                            <Text style={styles.microLabel}>WHATSAPP NUMBER <Text style={styles.requiredStar}>*</Text></Text>
+                            <View style={[styles.inlineInputRow, errors.whatsapp && styles.inputError]}>
+                                <Feather name="chevron-right" size={16} color={patientColors.primary} style={styles.promptIcon} />
+                                <TextInput
+                                    style={styles.inlineInput}
+                                    placeholder="+91 98765 43210"
+                                    placeholderTextColor={patientColors.textMuted}
+                                    value={whatsappNumber}
+                                    onChangeText={setWhatsappNumber}
+                                    keyboardType="phone-pad"
+                                    autoComplete="tel"
+                                    returnKeyType="done"
+                                    onSubmitEditing={handleRegister}
+                                    editable={!loading}
+                                />
+                            </View>
+                            {errors.whatsapp && <Text style={styles.errorText}>{errors.whatsapp}</Text>}
+                        </View>
+
                         {/* Submit */}
                         <Pressable
                             style={({ pressed }) => [styles.button, pressed && styles.buttonPressed, loading && styles.buttonDisabled]}
@@ -196,7 +228,7 @@ export default function PatientRegisterScreen() {
                                     <Text style={styles.buttonText}>Creating account...</Text>
                                 </View>
                             ) : (
-                                <Text style={styles.buttonText}>Create Patient Account</Text>
+                                <Text style={styles.buttonText}>Create Caregiver Account</Text>
                             )}
                         </Pressable>
 

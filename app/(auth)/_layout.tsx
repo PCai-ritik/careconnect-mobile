@@ -16,10 +16,10 @@ export default function AuthLayout() {
 
     // Already authenticated — redirect to appropriate role group
     if (user) {
-        if (user.userType === 'doctor') {
+        if (user.role === 'DOCTOR') {
             return <Redirect href="/(doctor)" />;
         }
-        return <Redirect href="/(patient)" />;
+        return <Redirect href="/(caregiver)" />;
     }
 
     return (

@@ -2,7 +2,7 @@
  * CareConnect — Theme Provider
  *
  * Provides role-based design tokens to child components.
- * Wraps the app and makes patient/doctor colors accessible via context.
+ * Wraps the app and makes caregiver/doctor colors accessible via context.
  */
 
 import React, { createContext, useContext, type ReactNode } from 'react';
@@ -12,7 +12,7 @@ type RoleColors = typeof patientColors | typeof doctorColors;
 
 interface ThemeContextValue {
     colors: RoleColors;
-    role: 'patient' | 'doctor' | null;
+    role: 'caregiver' | 'doctor' | null;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
@@ -27,7 +27,7 @@ interface ThemeProviderProps {
 /**
  * Root-level ThemeProvider.
  * During foundation setup this is a passthrough wrapper.
- * Group layouts (patient/doctor) will set the correct role colors
+ * Group layouts (caregiver/doctor) will set the correct role colors
  * by wrapping their children in role-specific providers.
  */
 export function ThemeProvider({ children }: ThemeProviderProps) {
@@ -41,9 +41,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 /**
  * Role-specific provider used by group layouts.
  */
-export function PatientThemeProvider({ children }: { children: ReactNode }) {
+export function CaregiverThemeProvider({ children }: { children: ReactNode }) {
     return (
-        <ThemeContext.Provider value={{ colors: patientColors, role: 'patient' }}>
+        <ThemeContext.Provider value={{ colors: patientColors, role: 'caregiver' }}>
             {children}
         </ThemeContext.Provider>
     );

@@ -145,3 +145,34 @@ export const radii = {
   xl: 20,
   full: 9999,
 } as const;
+
+// ─── White-Label Branding ───────────────────────────────────────────────────
+// Hospital-specific branding fetched from GET /hospitals/{id}/branding.
+// Call setBranding() after login to apply the hospital's colors.
+
+export interface BrandingConfig {
+  name: string;
+  primaryColor: string;
+  logoUrl: string | null;
+}
+
+let currentBranding: BrandingConfig = {
+  name: 'CareConnect',
+  primaryColor: '#4F46E5',
+  logoUrl: null,
+};
+
+/**
+ * Apply hospital branding globally. Call after login.
+ * Components that need dynamic brand color should import getBranding().
+ */
+export function setBranding(config: Partial<BrandingConfig>): void {
+  currentBranding = { ...currentBranding, ...config };
+}
+
+/**
+ * Get the current hospital branding.
+ */
+export function getBranding(): BrandingConfig {
+  return currentBranding;
+}

@@ -30,7 +30,7 @@ export default function DoctorTabLayout() {
 
     if (isLoading) return null;
     if (!user) return <Redirect href="/(auth)/doctor-login" />;
-    if (user.userType !== 'doctor') return <Redirect href="/(patient)" />;
+    if (user.role !== 'DOCTOR') return <Redirect href="/(caregiver)" />;
 
     return (
         <DoctorThemeProvider>
@@ -111,10 +111,6 @@ export default function DoctorTabLayout() {
                 {/* ── Hidden routes (no tab bar entry) ── */}
                 <Tabs.Screen
                     name="consultation/[id]"
-                    options={{ href: null }}
-                />
-                <Tabs.Screen
-                    name="messages"
                     options={{ href: null }}
                 />
             </Tabs>

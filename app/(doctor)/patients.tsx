@@ -5,7 +5,7 @@
  * the PatientChartModal. Uses doctorColors tokens + StyleSheet.create().
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     View,
     Text,
@@ -13,6 +13,8 @@ import {
     FlatList,
     Pressable,
     StyleSheet,
+    ActivityIndicator,
+    RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -23,7 +25,9 @@ import {
     shadows,
     radii,
 } from '@/constants/theme';
-import { mockRecentPatients, type MockPatient } from '@/services/mock-data';
+import { useAuth } from '@/hooks/useAuth';
+import { getPatients, addPatient } from '@/services/doctor';
+import type { PatientProfile, PatientCreate } from '@/services/types';
 import PatientChartModal from '@/components/doctor/PatientChartModal';
 import NewPrescriptionModal from '@/components/doctor/NewPrescriptionModal';
 import AddPatientModal from '@/components/doctor/AddPatientModal';
@@ -45,6 +49,30 @@ function hashName(name: string): number {
 
 function avatarColor(name: string): string {
     return AVATAR_COLORS[hashName(name) % AVATAR_COLORS.length];
+}
+
+/** Calculate age from DOB string */
+function calcAge(dob: string | null): number | null {
+    if (!dob) return null;
+    const birth = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    return age;
+}
+
+/** e.g. "2024-01-15T..." → "3 months ago" */
+function timeAgo(dateStr: string): string {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60_000);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 30) return `${days}d ago`;
+    const months = Math.floor(days / 30);
+    return `${months}mo ago`;
 }
 
 // ─── Sub-Components ─────────────────────────────────────────────────────────
@@ -71,27 +99,29 @@ function PatientCard({
     patient,
     onPress,
 }: {
-    patient: MockPatient;
+    patient: PatientProfile;
     onPress: () => void;
 }) {
+    const age = calcAge(patient.date_of_birth);
+    const condition = patient.existing_conditions?.join(', ') ?? '—';
     return (
         <Pressable
             style={({ pressed }) => [s.card, pressed && { opacity: 0.7 }]}
             onPress={onPress}
         >
-            <Avatar name={patient.name} size={50} />
+            <Avatar name={patient.full_name} size={50} />
 
             <View style={s.cardInfo}>
-                <Text style={s.cardName}>{patient.name}</Text>
-                {(patient.age || patient.gender) && (
+                <Text style={s.cardName}>{patient.full_name}</Text>
+                {(age || patient.gender) && (
                     <Text style={s.cardDemographics}>
-                        {patient.age ? `Age: ${patient.age}` : ''}
-                        {patient.age && patient.gender ? '  •  ' : ''}
+                        {age ? `Age: ${age}` : ''}
+                        {age && patient.gender ? '  •  ' : ''}
                         {patient.gender ?? ''}
                     </Text>
                 )}
-                <Text style={s.cardCondition}>{patient.condition}</Text>
-                <Text style={s.cardVisit}>Last visit: {patient.lastVisit}</Text>
+                <Text style={s.cardCondition}>{condition}</Text>
+                <Text style={s.cardVisit}>Added: {timeAgo(patient.created_at)}</Text>
             </View>
 
             <Feather name="chevron-right" size={20} color={doctorColors.textMuted} />
@@ -102,24 +132,50 @@ function PatientCard({
 // ─── Main Screen ────────────────────────────────────────────────────────────
 
 export default function PatientsScreen() {
+    const { token, user } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
-    const [selectedPatient, setSelectedPatient] = useState<MockPatient | null>(null);
+    const [selectedPatient, setSelectedPatient] = useState<PatientProfile | null>(null);
     const [isChartOpen, setIsChartOpen] = useState(false);
     const [isPrescriptionOpen, setIsPrescriptionOpen] = useState(false);
     const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
     const [prescriptionPatientName, setPrescriptionPatientName] = useState('');
 
-    const filtered = useMemo(() => {
-        if (!searchQuery.trim()) return mockRecentPatients;
-        const q = searchQuery.toLowerCase();
-        return mockRecentPatients.filter(
-            (p) =>
-                p.name.toLowerCase().includes(q) ||
-                p.condition.toLowerCase().includes(q),
-        );
-    }, [searchQuery]);
+    // Real patient data from API
+    const [patients, setPatients] = useState<PatientProfile[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
-    const openChart = (patient: MockPatient) => {
+    const fetchPatients = useCallback(async () => {
+        if (!token) return;
+        try {
+            const data = await getPatients(token);
+            setPatients(data);
+        } catch (e) {
+            console.error('Failed to load patients:', e);
+        }
+    }, [token]);
+
+    useEffect(() => {
+        fetchPatients().finally(() => setLoading(false));
+    }, [fetchPatients]);
+
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        await fetchPatients();
+        setRefreshing(false);
+    }, [fetchPatients]);
+
+    const filtered = useMemo(() => {
+        if (!searchQuery.trim()) return patients;
+        const q = searchQuery.toLowerCase();
+        return patients.filter(
+            (p) =>
+                p.full_name.toLowerCase().includes(q) ||
+                (p.existing_conditions?.some((c) => c.toLowerCase().includes(q)) ?? false),
+        );
+    }, [searchQuery, patients]);
+
+    const openChart = (patient: PatientProfile) => {
         setSelectedPatient(patient);
         setIsChartOpen(true);
     };
@@ -131,7 +187,7 @@ export default function PatientsScreen() {
                 <View>
                     <Text style={s.headerTitle}>Patients</Text>
                     <Text style={s.headerSubtitle}>
-                        {mockRecentPatients.length} patients in directory
+                        {patients.length} patients in directory
                     </Text>
                 </View>
                 <Pressable
@@ -168,14 +224,27 @@ export default function PatientsScreen() {
                 )}
                 contentContainerStyle={s.listContent}
                 showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={doctorColors.primary}
+                    />
+                }
                 ListEmptyComponent={
-                    <View style={s.emptyState}>
-                        <Feather name="search" size={40} color={doctorColors.textMuted} />
-                        <Text style={s.emptyTitle}>No patients found</Text>
-                        <Text style={s.emptySubtitle}>
-                            Try a different search term
-                        </Text>
-                    </View>
+                    loading ? (
+                        <View style={s.emptyState}>
+                            <ActivityIndicator size="large" color={doctorColors.primary} />
+                        </View>
+                    ) : (
+                        <View style={s.emptyState}>
+                            <Feather name="search" size={40} color={doctorColors.textMuted} />
+                            <Text style={s.emptyTitle}>No patients found</Text>
+                            <Text style={s.emptySubtitle}>
+                                Try a different search term
+                            </Text>
+                        </View>
+                    )
                 }
             />
 
@@ -185,7 +254,7 @@ export default function PatientsScreen() {
                 patient={selectedPatient}
                 onClose={() => setIsChartOpen(false)}
                 onNewPrescription={() => {
-                    const name = selectedPatient?.name ?? '';
+                    const name = selectedPatient?.full_name ?? '';
                     setIsChartOpen(false);
                     setPrescriptionPatientName(name);
                     setIsPrescriptionOpen(true);
@@ -194,11 +263,15 @@ export default function PatientsScreen() {
             <NewPrescriptionModal
                 visible={isPrescriptionOpen}
                 onClose={() => setIsPrescriptionOpen(false)}
+                patientId={selectedPatient?.id}
                 patientName={prescriptionPatientName}
+                patientGender={selectedPatient?.gender ?? ''}
+                onPrescriptionCreated={fetchPatients}
             />
             <AddPatientModal
                 visible={isAddPatientOpen}
                 onClose={() => setIsAddPatientOpen(false)}
+                onPatientAdded={fetchPatients}
             />
         </SafeAreaView>
     );

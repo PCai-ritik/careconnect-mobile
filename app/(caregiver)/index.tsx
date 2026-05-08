@@ -1,5 +1,5 @@
 /**
- * CareConnect — Patient Dashboard + 4-Step Booking Wizard
+ * CareConnect — Caregiver Dashboard + 4-Step Booking Wizard
  *
  * Dashboard layout:
  *   1. Header: logo + user avatar with notification dot
@@ -17,7 +17,7 @@
  * Uses patientColors design tokens + StyleSheet.create(). No Nativewind.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import {
     View,
@@ -29,6 +29,8 @@ import {
     ActivityIndicator,
     StyleSheet,
     Dimensions,
+    Linking,
+    Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -39,15 +41,14 @@ import {
     radii,
     shadows,
 } from '@/constants/theme';
-import {
-    mockDoctors,
-    mockAppointments,
-    mockMedicalRecords,
-} from '@/services/mock-data';
-import type { MockMedicalRecord } from '@/services/mock-data';
 import { useAuth } from '@/hooks/useAuth';
+import { getMyAppointments, getDoctorsByHospital, getPatientRecords, getLinkedPatients, bookAppointment, addPatient, updatePatient, getJoinToken } from '@/services/caregiver';
+import type { DoctorProfile, Appointment, MedicalRecord, PatientProfile } from '@/services/types';
 import MedicalRecordSheet from '@/components/MedicalRecordSheet';
 import PatientThemedAlert from '@/components/patient/PatientThemedAlert';
+import AddPatientSheet from '@/components/caregiver/AddPatientSheet';
+import PatientChartSheet from '@/components/caregiver/PatientChartSheet';
+import SmartJoinButton from '@/components/SmartJoinButton';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.85;
@@ -182,15 +183,20 @@ function isSameDay(a: Date | null, b: Date | null): boolean {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export default function PatientDashboardScreen() {
-    const upcomingAppointment = mockAppointments.find((a) => a.status === 'upcoming') ?? null;
-    const hasNotifications = mockMedicalRecords.length > 0;
+export default function CaregiverDashboardScreen() {
     const router = useRouter();
-    const { logout } = useAuth();
+    const { user, token, logout } = useAuth();
     const insets = useSafeAreaInsets();
-    const [showLogoutAlert, setShowLogoutAlert] = useState(false);
 
-    // -- Booking modal state --
+    // -- API data --
+    const [appointments, setAppointments] = useState<Appointment[]>([]);
+    const [doctors, setDoctors] = useState<DoctorProfile[]>([]);
+    const [records, setRecords] = useState<MedicalRecord[]>([]);
+    const [patients, setPatients] = useState<PatientProfile[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    // -- UI state --
+    const [showLogoutAlert, setShowLogoutAlert] = useState(false);
     const [isBookingOpen, setIsBookingOpen] = useState(false);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const [bookingStep, setBookingStep] = useState(1);
@@ -201,40 +207,102 @@ export default function PatientDashboardScreen() {
     const [selectedPayment, setSelectedPayment] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
-    const [selectedRecord, setSelectedRecord] = useState<MockMedicalRecord | null>(null);
+    const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
     const [isRecordSheetOpen, setIsRecordSheetOpen] = useState(false);
+    const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
+    const [selectedPatient, setSelectedPatient] = useState<PatientProfile | null>(null);
+    const [isPatientChartOpen, setIsPatientChartOpen] = useState(false);
+    const [showNoPatientsAlert, setShowNoPatientsAlert] = useState(false);
 
     // -- Calendar month navigation --
     const now = new Date();
     const [calMonth, setCalMonth] = useState(now.getMonth());
     const [calYear, setCalYear] = useState(now.getFullYear());
 
+    // -- Fetch data from API --
+    const fetchAll = useCallback(async () => {
+        if (!token) return;
+        try {
+            const [appts, pts] = await Promise.all([
+                getMyAppointments(token),
+                getLinkedPatients(token),
+            ]);
+            setAppointments(appts);
+            setPatients(pts);
+            // Fetch doctors for name resolution in Next Up card
+            const hospitalId = user?.hospitalId ?? pts[0]?.hospital_id ?? '';
+            if (hospitalId) {
+                try {
+                    const docs = await getDoctorsByHospital(hospitalId);
+                    setDoctors(docs);
+                } catch { }
+            }
+            // Fetch records for the first linked patient (if any)
+            if (pts.length > 0) {
+                const recs = await getPatientRecords(token, pts[0].id);
+                setRecords(recs);
+            }
+        } catch (e) {
+            console.error('Caregiver dashboard fetch error:', e);
+        } finally {
+            setLoading(false);
+        }
+    }, [token]);
+
+    useEffect(() => { fetchAll(); }, [fetchAll]);
+
+    const openBookingWizard = async () => {
+        // Guard: require at least one patient before booking
+        if (patients.length === 0) {
+            setShowNoPatientsAlert(true);
+            return;
+        }
+        setIsBookingOpen(true);
+        if (doctors.length === 0) {
+            try {
+                const hospitalId = user?.hospitalId ?? patients[0]?.hospital_id ?? '';
+                const docs = await getDoctorsByHospital(hospitalId);
+                setDoctors(docs);
+            } catch (e) {
+                console.error('Failed to fetch doctors:', e);
+            }
+        }
+    };
+
     // -- Derived data --
+    const upcomingAppointment = appointments.find(
+        (a) => a.status === 'CONFIRMED' || a.status === 'IN_PROGRESS',
+    ) ?? null;
+    const hasNotifications = records.length > 0;
+
     const specialties = useMemo(
-        () => [...new Set(mockDoctors.map((d) => d.specialization))],
-        [],
+        () => [...new Set(doctors.map((d) => d.specialization))],
+        [doctors],
     );
     const filteredDoctors = useMemo(
-        () => mockDoctors.filter((d) => d.specialization === selectedSpecialty),
-        [selectedSpecialty],
+        () => doctors.filter((d) => d.specialization === selectedSpecialty),
+        [selectedSpecialty, doctors],
     );
     const selectedDoctor = useMemo(
-        () => mockDoctors.find((d) => d.id === selectedDoctorId) ?? null,
-        [selectedDoctorId],
+        () => doctors.find((d) => d.id === selectedDoctorId) ?? null,
+        [selectedDoctorId, doctors],
     );
     const monthGrid = useMemo(() => buildMonthGrid(calYear, calMonth), [calYear, calMonth]);
     const timeSlots = useMemo(() => {
         if (!selectedDoctor || !selectedDate) return [];
         const dayName = DAY_NAMES[selectedDate.getDay()];
-        const schedule = selectedDoctor.availability.schedule[dayName];
-        if (!schedule?.enabled) return [];
-        return generateTimeSlots(schedule.startTime, schedule.endTime, selectedDoctor.availability.consultationDuration);
+        const slot = selectedDoctor.availability_slots.find(
+            (s) => s.day_of_week === dayName && s.is_enabled,
+        );
+        if (!slot) return [];
+        const duration = String(selectedDoctor.consultation_duration_minutes ?? 30);
+        return generateTimeSlots(slot.start_time, slot.end_time, duration);
     }, [selectedDoctor, selectedDate]);
     const doctorPaymentMethods = useMemo(() => {
-        if (!selectedDoctor) return [];
-        return PAYMENT_METHODS.filter((pm) =>
-            selectedDoctor.payments.acceptedPaymentMethods.includes(pm.id),
-        );
+        if (!selectedDoctor) return PAYMENT_METHODS;
+        const accepted = selectedDoctor.accepted_payment_methods ?? [];
+        if (accepted.length === 0) return PAYMENT_METHODS;
+        return PAYMENT_METHODS.filter((pm) => accepted.includes(pm.id));
     }, [selectedDoctor]);
 
     // -- Actions --
@@ -267,11 +335,40 @@ export default function PatientDashboardScreen() {
         setBookingStep(3);
     };
     const handleConfirmBooking = async () => {
+        if (!token || !selectedDoctor || !selectedDate || !selectedTime || !patients[0]) return;
         setIsSubmitting(true);
-        await new Promise((r) => setTimeout(r, 1500));
-        setIsSubmitting(false);
-        setIsBookingOpen(false);
-        setShowSuccess(true);
+        try {
+            // Build ISO scheduled_time from selectedDate + selectedTime
+            const [timePart, period] = selectedTime.split(' ');
+            const [hStr, mStr] = timePart.split(':');
+            let hours = parseInt(hStr, 10);
+            if (period === 'PM' && hours !== 12) hours += 12;
+            if (period === 'AM' && hours === 12) hours = 0;
+            const scheduled = new Date(selectedDate);
+            scheduled.setHours(hours, parseInt(mStr, 10), 0, 0);
+
+            await bookAppointment(token, {
+                doctor_id: selectedDoctor.id,
+                patient_id: patients[0].id,
+                hospital_id: user?.hospitalId ?? patients[0]?.hospital_id ?? '',
+                scheduled_time: scheduled.toISOString(),
+                duration_minutes: selectedDoctor.consultation_duration_minutes ?? 30,
+                appointment_type: 'VIDEO',
+            });
+
+            // Update patient to link them to this doctor (needed for doctor-level isolation)
+            await updatePatient(token, patients[0].id, {
+                doctor_id: selectedDoctor.id,
+            });
+
+            setIsBookingOpen(false);
+            setShowSuccess(true);
+            fetchAll(); // refresh appointments
+        } catch (e) {
+            console.error('Booking failed:', e);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
     const dismissSuccess = () => {
         setShowSuccess(false);
@@ -349,10 +446,10 @@ export default function PatientDashboardScreen() {
                             <View style={ms.doctorInfo}>
                                 <Text style={ms.doctorName}>{doc.full_name}</Text>
                                 <Text style={ms.doctorMeta}>
-                                    {doc.verification.yearsOfExperience}  •  {doc.verification.hospitalAffiliation}
+                                    {doc.years_of_experience ?? ''}  •  {doc.hospital_affiliation ?? ''}
                                 </Text>
                                 <Text style={ms.doctorFee}>
-                                    {currencySymbol(doc.payments.currency)}{doc.payments.consultationFee} / {doc.availability.consultationDuration}
+                                    {currencySymbol(doc.currency)}{doc.consultation_fee ?? 0} / {doc.consultation_duration_minutes ?? 30} min
                                 </Text>
                             </View>
                             <Feather name="chevron-right" size={18} color={patientColors.textMuted} />
@@ -392,7 +489,9 @@ export default function PatientDashboardScreen() {
 
                             const past = isPast(cell);
                             const dayName = DAY_NAMES[cell.getDay()];
-                            const dayEnabled = selectedDoctor?.availability.schedule[dayName]?.enabled ?? false;
+                            const dayEnabled = selectedDoctor?.availability_slots.some(
+                                (s) => s.day_of_week === dayName && s.is_enabled,
+                            ) ?? false;
                             const disabled = past || !dayEnabled;
                             const today = isToday(cell);
                             const selected = isSameDay(cell, selectedDate);
@@ -473,7 +572,7 @@ export default function PatientDashboardScreen() {
                         { label: 'Doctor', value: doc.full_name },
                         { label: 'Specialty', value: doc.specialization },
                         { label: 'Date & Time', value: `${dateStr} at ${selectedTime}` },
-                        { label: 'Duration', value: doc.availability.consultationDuration },
+                        { label: 'Duration', value: `${doc.consultation_duration_minutes ?? 30} min` },
                     ].map((item) => (
                         <View key={item.label} style={ms.summaryRow}>
                             <View style={ms.summaryDotContainer}>
@@ -489,7 +588,7 @@ export default function PatientDashboardScreen() {
                     <View style={ms.summaryFeeRow}>
                         <Text style={ms.summaryFeeLabel}>Consultation Fee</Text>
                         <Text style={ms.summaryFeeValue}>
-                            {currencySymbol(doc.payments.currency)}{doc.payments.consultationFee}
+                            {currencySymbol(doc.currency)}{doc.consultation_fee ?? 0}
                         </Text>
                     </View>
                 </View>
@@ -563,7 +662,7 @@ export default function PatientDashboardScreen() {
                         <Text style={styles.brandText}>CareConnect</Text>
                     </View>
                     <Pressable style={styles.avatarWrapper} onPress={() => setIsProfileMenuOpen(true)}>
-                        <View style={[styles.avatar, { backgroundColor: getAvatarColor('Ananya Sharma') }]}>
+                        <View style={[styles.avatar, { backgroundColor: getAvatarColor('Caregiver') }]}>
                             <Feather name="user" size={20} color="#374151" />
                         </View>
                         {hasNotifications && <View style={styles.notificationDot} />}
@@ -572,7 +671,7 @@ export default function PatientDashboardScreen() {
 
                 {/* ── 2. Welcome ── */}
                 <View style={styles.welcomeSection}>
-                    <Text style={styles.greeting}>Welcome back, Ananya</Text>
+                    <Text style={styles.greeting}>Welcome back</Text>
                     <Text style={styles.subtitle}>Manage your health appointments and records</Text>
                 </View>
 
@@ -582,30 +681,55 @@ export default function PatientDashboardScreen() {
                         <Text style={styles.nextUpLabel}>NEXT UP</Text>
                         <View style={styles.nextUpBody}>
                             <View style={styles.nextUpRow}>
-                                <View style={[styles.doctorAvatar, { backgroundColor: getAvatarColor(upcomingAppointment.doctorName) }]}>
+                                <View style={[styles.doctorAvatar, { backgroundColor: getAvatarColor(upcomingAppointment.doctor_id) }]}>
                                     <Feather name="user" size={20} color="#374151" />
                                 </View>
                                 <View style={styles.nextUpInfo}>
-                                    <Text style={styles.nextUpDoctor}>{upcomingAppointment.doctorName}</Text>
-                                    <Text style={styles.nextUpSpec}>{upcomingAppointment.doctorSpecialization}</Text>
+                                    <Text style={styles.nextUpDoctor}>{doctors.find(d => d.id === upcomingAppointment.doctor_id)?.full_name ?? 'Doctor'}'s Appointment</Text>
+                                    <Text style={styles.nextUpSpec}>{upcomingAppointment.appointment_type}</Text>
                                 </View>
                             </View>
                             <View style={styles.nextUpTimeRow}>
                                 <Feather name="clock" size={14} color={patientColors.textMuted} />
-                                <Text style={styles.nextUpTime}>{upcomingAppointment.date} at {upcomingAppointment.time}</Text>
+                                <Text style={styles.nextUpTime}>{new Date(upcomingAppointment.scheduled_time).toLocaleString()}</Text>
                             </View>
                         </View>
-                        <Pressable style={({ pressed }) => [styles.joinCallButton, pressed && { opacity: 0.85 }]}
-                            onPress={() => router.push(`/(patient)/consultation/${upcomingAppointment?.id ?? 'appt-001'}`)}>
-                            <Feather name="video" size={18} color="#FFFFFF" />
-                            <Text style={styles.joinCallText}>Join Video Call</Text>
-                        </Pressable>
+                        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                            <Pressable
+                                style={({ pressed }) => [styles.nextUpShareBtn, pressed && { opacity: 0.7 }]}
+                                onPress={async () => {
+                                    if (!token || !upcomingAppointment) return;
+                                    const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://careconnect.app';
+                                    try {
+                                        const res = await getJoinToken(token, upcomingAppointment.id);
+                                        if (!res.patient_join_token) {
+                                            Alert.alert('Not ready', 'The doctor needs to start the call first.');
+                                            return;
+                                        }
+                                        const joinUrl = `${WEB_URL}/join/${upcomingAppointment.id}?token=${encodeURIComponent(res.patient_join_token)}`;
+                                        const msg = `Hi! Your CareConnect video consultation is ready.\n\nJoin here: ${joinUrl}`;
+                                        await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(msg)}`);
+                                    } catch (err: any) {
+                                        Alert.alert('Share failed', err.message);
+                                    }
+                                }}
+                            >
+                                <Feather name="share-2" size={18} color={patientColors.primary} />
+                            </Pressable>
+                            <SmartJoinButton
+                                scheduledTime={upcomingAppointment.scheduled_time}
+                                durationMinutes={upcomingAppointment.duration_minutes || 30}
+                                role="caregiver"
+                                onPress={() => router.push(`/(caregiver)/consultation/${upcomingAppointment.id}` as any)}
+                                style={{ flex: 1 }}
+                            />
+                        </View>
                     </View>
                 )}
 
                 {/* ── 4. Book CTA ── */}
                 <Pressable style={({ pressed }) => [styles.bookCta, pressed && { opacity: 0.85 }]}
-                    onPress={() => setIsBookingOpen(true)}>
+                    onPress={openBookingWizard}>
                     <View style={styles.bookCtaIconCircle}>
                         <Feather name="plus" size={20} color={patientColors.primary} />
                     </View>
@@ -616,20 +740,63 @@ export default function PatientDashboardScreen() {
                     <Feather name="chevron-right" size={20} color={patientColors.primary} />
                 </Pressable>
 
-                {/* ── 5. Recent Records ── */}
+                {/* ── 5. Patients Under Care ── */}
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Patients Under Care</Text>
+                </View>
+                {patients.length > 0 ? (
+                    patients.map((pt) => {
+                        const age = pt.date_of_birth
+                            ? Math.floor((Date.now() - new Date(pt.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+                            : null;
+                        return (
+                            <Pressable
+                                key={pt.id}
+                                style={({ pressed }) => [styles.patientCard, pressed && { opacity: 0.85 }]}
+                                onPress={() => { setSelectedPatient(pt); setIsPatientChartOpen(true); }}
+                            >
+                                <View style={[styles.patientAvatar, { backgroundColor: getAvatarColor(pt.full_name) }]}>
+                                    <Text style={styles.patientAvatarText}>
+                                        {pt.full_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                    </Text>
+                                </View>
+                                <View style={styles.patientInfo}>
+                                    <Text style={styles.patientName} numberOfLines={1}>{pt.full_name}</Text>
+                                    <Text style={styles.patientMeta}>
+                                        {age ? `${age} yrs` : ''}{age && pt.blood_group ? ' • ' : ''}{pt.blood_group ?? ''}
+                                        {pt.existing_conditions && pt.existing_conditions.length > 0
+                                            ? ` • ${pt.existing_conditions.join(', ')}`
+                                            : ''}
+                                    </Text>
+                                </View>
+                                <Feather name="chevron-right" size={18} color={patientColors.textMuted} />
+                            </Pressable>
+                        );
+                    })
+                ) : (
+                    <Pressable
+                        style={({ pressed }) => [styles.emptyPatientCard, pressed && { opacity: 0.85 }]}
+                        onPress={() => setIsAddPatientOpen(true)}
+                    >
+                        <Feather name="user-plus" size={20} color={patientColors.textMuted} />
+                        <Text style={styles.emptyPatientText}>No patients added yet. Tap to add your first patient.</Text>
+                    </Pressable>
+                )}
+
+                {/* ── 6. Recent Records ── */}
                 <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Recent Records</Text>
-                    <Pressable onPress={() => router.push('/(patient)/records' as any)}>
+                    <Pressable onPress={() => router.push('/(caregiver)/records' as any)}>
                         <Text style={styles.viewAllLink}>View All</Text>
                     </Pressable>
                 </View>
-                {mockMedicalRecords.map((record) => (
+                {records.slice(0, 5).map((record) => (
                     <Pressable key={record.id}
                         style={({ pressed }) => [styles.recordCard, pressed && { opacity: 0.85 }]}
                         onPress={() => { setSelectedRecord(record); setIsRecordSheetOpen(true); }}>
                         <View style={styles.recordContent}>
                             <Text style={styles.recordDiagnosis}>{record.diagnosis}</Text>
-                            <Text style={styles.recordMeta}>{record.doctorName}  •  {record.date}</Text>
+                            <Text style={styles.recordMeta}>Doctor  •  {new Date(record.created_at).toLocaleDateString()}</Text>
                         </View>
                         <Feather name="chevron-right" size={18} color={patientColors.textMuted} />
                     </Pressable>
@@ -642,8 +809,8 @@ export default function PatientDashboardScreen() {
                 <Pressable style={styles.dropdownBackdrop} onPress={() => setIsProfileMenuOpen(false)}>
                     <View style={styles.dropdownMenu}>
                         {[
-                            { icon: 'user' as const, label: 'Profile', route: '/(patient)/profile' },
-                            { icon: 'file-text' as const, label: 'Your Reports', route: '/(patient)/records' },
+                            { icon: 'user' as const, label: 'Profile', route: '/(caregiver)/profile' },
+                            { icon: 'file-text' as const, label: 'Your Reports', route: '/(caregiver)/records' },
                         ].map((item) => (
                             <Pressable
                                 key={item.label}
@@ -738,6 +905,53 @@ export default function PatientDashboardScreen() {
                 }}
                 onCancel={() => setShowLogoutAlert(false)}
             />
+
+            {/* ═══ NO PATIENTS ALERT ═══ */}
+            <PatientThemedAlert
+                visible={showNoPatientsAlert}
+                variant="warning"
+                icon="user-plus"
+                title="No Patients Yet"
+                message="You need to add at least one patient before booking a consultation. Add a patient to get started."
+                confirmLabel="Add Patient"
+                cancelLabel="Cancel"
+                onConfirm={() => {
+                    setShowNoPatientsAlert(false);
+                    setIsAddPatientOpen(true);
+                }}
+                onCancel={() => setShowNoPatientsAlert(false)}
+            />
+
+            {/* ═══ ADD PATIENT SHEET ═══ */}
+            <AddPatientSheet
+                visible={isAddPatientOpen}
+                onClose={() => setIsAddPatientOpen(false)}
+                onPatientAdded={fetchAll}
+                onSubmit={async (data) => {
+                    if (!token) return;
+                    await addPatient(token, data);
+                }}
+            />
+
+            {/* ═══ PATIENT CHART SHEET ═══ */}
+            <PatientChartSheet
+                visible={isPatientChartOpen}
+                patient={selectedPatient}
+                onClose={() => setIsPatientChartOpen(false)}
+                onSave={async (patientId, data) => {
+                    if (!token) return;
+                    await updatePatient(token, patientId, data);
+                    fetchAll();
+                }}
+            />
+
+            {/* ═══ FLOATING ADD PATIENT FAB ═══ */}
+            <Pressable
+                style={({ pressed }) => [styles.fab, pressed && { opacity: 0.85, transform: [{ scale: 0.95 }] }]}
+                onPress={() => setIsAddPatientOpen(true)}
+            >
+                <Feather name="plus" size={24} color="#FFFFFF" />
+            </Pressable>
         </SafeAreaView>
     );
 }
@@ -776,6 +990,7 @@ const styles = StyleSheet.create({
     nextUpSpec: { fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: patientColors.textSecondary },
     nextUpTimeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginLeft: 44 + spacing.md },
     nextUpTime: { fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: patientColors.textMuted },
+    nextUpShareBtn: { width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, borderWidth: 1, borderColor: patientColors.border, backgroundColor: patientColors.surface },
     joinCallButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: patientColors.primary, paddingVertical: spacing.md, borderRadius: radii.md },
     joinCallText: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: '#FFFFFF' },
     bookCta: { flexDirection: 'row', alignItems: 'center', backgroundColor: patientColors.primaryLight, borderRadius: radii.lg, padding: spacing.lg, marginBottom: spacing['2xl'], gap: spacing.md },
@@ -790,6 +1005,49 @@ const styles = StyleSheet.create({
     recordContent: { flex: 1 },
     recordDiagnosis: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: patientColors.textPrimary, marginBottom: spacing.xxs },
     recordMeta: { fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: patientColors.textMuted },
+
+    // Patient cards (full-width rows)
+    patientCard: {
+        flexDirection: 'row', alignItems: 'center',
+        backgroundColor: patientColors.surface, borderRadius: radii.md,
+        padding: spacing.lg, marginBottom: spacing.sm, borderWidth: 1,
+        borderColor: patientColors.borderLight, gap: spacing.md, ...shadows.card,
+    },
+    patientAvatar: {
+        width: 44, height: 44, borderRadius: radii.full,
+        alignItems: 'center', justifyContent: 'center',
+    },
+    patientAvatarText: {
+        fontFamily: typography.fontFamily.bold, ...typography.size.base, color: '#FFFFFF',
+    },
+    patientInfo: { flex: 1 },
+    patientName: {
+        fontFamily: typography.fontFamily.semiBold, ...typography.size.base,
+        color: patientColors.textPrimary, marginBottom: 2,
+    },
+    patientMeta: {
+        fontFamily: typography.fontFamily.regular, ...typography.size.sm,
+        color: patientColors.textMuted,
+    },
+    emptyPatientCard: {
+        flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+        backgroundColor: patientColors.surfaceMuted, borderRadius: radii.md,
+        padding: spacing.lg, marginBottom: spacing.xl,
+        borderWidth: 1, borderColor: patientColors.borderLight, borderStyle: 'dashed',
+    },
+    emptyPatientText: {
+        flex: 1, fontFamily: typography.fontFamily.regular, ...typography.size.sm,
+        color: patientColors.textMuted,
+    },
+
+    // FAB
+    fab: {
+        position: 'absolute', bottom: 24, right: 20,
+        width: 56, height: 56, borderRadius: 28,
+        backgroundColor: patientColors.primary,
+        alignItems: 'center', justifyContent: 'center',
+        ...shadows.elevated,
+    },
 });
 
 // ─── Modal Styles ───────────────────────────────────────────────────────────

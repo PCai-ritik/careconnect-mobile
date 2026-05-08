@@ -77,10 +77,21 @@ export default function DoctorRegisterScreen() {
         setLoading(true);
 
         try {
-            const response = await registerDoctor({ fullName, email, password, specialization: '' });
-            // Don't call login() here — it would authenticate the user and trigger
-            // the auth layout redirect to dashboard before onboarding can start.
-            console.log('[Doctor Register] Account created, proceeding to onboarding:', response.user.id);
+            const response = await registerDoctor({
+                fullName,
+                email,
+                password,
+                hospitalId: '',   // Defaults to CareConnect hospital on backend
+                specialization: '',
+            });
+            // Store token so onboarding can call authenticated endpoints
+            // Don't call login() — that would trigger auth layout redirect before onboarding finishes
+            const SecureStore = await import('expo-secure-store');
+            await SecureStore.setItemAsync('careconnect_onboarding_token', response.access_token);
+            await SecureStore.setItemAsync('careconnect_onboarding_user', JSON.stringify({
+                user_id: response.user_id,
+                role: response.role,
+            }));
             router.replace('/(auth)/doctor-onboarding' as Href);
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Registration failed. Please try again.';

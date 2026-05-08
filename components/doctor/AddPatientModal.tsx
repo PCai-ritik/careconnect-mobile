@@ -6,7 +6,7 @@
  * Uses doctorColors + StyleSheet.create().
  */
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -29,6 +29,8 @@ import {
     shadows,
     radii,
 } from '@/constants/theme';
+import { useAuth } from '@/hooks/useAuth';
+import { addPatient } from '@/services/doctor';
 import ThemedAlert from '@/components/doctor/ThemedAlert';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -36,6 +38,7 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 interface AddPatientModalProps {
     visible: boolean;
     onClose: () => void;
+    onPatientAdded?: () => void;
 }
 
 const GENDERS = ['Male', 'Female', 'Other'] as const;
@@ -50,7 +53,7 @@ function formatAadhar(value: string): string {
     return parts.join(' ');
 }
 
-export default function AddPatientModal({ visible, onClose }: AddPatientModalProps) {
+export default function AddPatientModal({ visible, onClose, onPatientAdded }: AddPatientModalProps) {
     const insets = useSafeAreaInsets();
     const { panHandlers, animatedStyle } = useSwipeDown(onClose);
     const [fullName, setFullName] = useState('');
@@ -66,6 +69,8 @@ export default function AddPatientModal({ visible, onClose }: AddPatientModalPro
     const [existingConditions, setExistingConditions] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const { token } = useAuth();
 
     const canSubmit = fullName.trim() && phone.trim() && dateOfBirth.trim();
 
@@ -83,13 +88,34 @@ export default function AddPatientModal({ visible, onClose }: AddPatientModalPro
         setExistingConditions('');
     };
 
-    const handleSubmit = async () => {
-        if (!canSubmit) return;
+    const handleSubmit = useCallback(async () => {
+        if (!canSubmit || !token) return;
         setIsSubmitting(true);
-        await new Promise((r) => setTimeout(r, 1000));
-        setIsSubmitting(false);
-        setShowSuccess(true);
-    };
+        setError(null);
+        try {
+            await addPatient(token, {
+                full_name: fullName.trim(),
+                whatsapp_number: phone.trim(),
+                hospital_id: '', // Will be resolved by backend from token
+                caregiver_id: '', // Will be resolved by backend from token
+                date_of_birth: dateOfBirth.trim() || undefined,
+                gender: gender || undefined,
+                blood_group: bloodGroup || undefined,
+                address: address.trim() || undefined,
+                aadhar_number: aadharNumber.replace(/\s/g, '') || undefined,
+                allergies: allergies.trim() ? allergies.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+                existing_conditions: existingConditions.trim() ? existingConditions.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+                emergency_contact_name: emergencyName.trim() || undefined,
+                emergency_contact_phone: emergencyPhone.trim() || undefined,
+            });
+            setShowSuccess(true);
+            onPatientAdded?.();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to register patient. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    }, [canSubmit, token, fullName, phone, dateOfBirth, gender, bloodGroup, address, aadharNumber, allergies, existingConditions, emergencyName, emergencyPhone, onPatientAdded]);
 
     return (
         <>

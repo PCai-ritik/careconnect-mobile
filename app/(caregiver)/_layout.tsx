@@ -1,24 +1,24 @@
 /**
- * CareConnect — Patient Group Layout
+ * CareConnect — Caregiver Group Layout
  *
- * Protected route group for patient/caregiver users.
+ * Protected route group for caregiver (family member) users.
  * Route guard: redirects unauthenticated users to auth, and doctors to their own group.
  */
 
 import { Stack, Redirect } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
-import { PatientThemeProvider } from '@/providers/ThemeProvider';
+import { CaregiverThemeProvider } from '@/providers/ThemeProvider';
 
-export default function PatientLayout() {
+export default function CaregiverLayout() {
     const { user, isLoading } = useAuth();
 
     if (isLoading) return null;
     if (!user) return <Redirect href="/(auth)/login" />;
-    if (user.userType !== 'patient') return <Redirect href="/(doctor)" />;
+    if (user.role !== 'CAREGIVER') return <Redirect href="/(doctor)" />;
 
     return (
-        <PatientThemeProvider>
+        <CaregiverThemeProvider>
             <Stack screenOptions={{ headerShown: false }} />
-        </PatientThemeProvider>
+        </CaregiverThemeProvider>
     );
 }

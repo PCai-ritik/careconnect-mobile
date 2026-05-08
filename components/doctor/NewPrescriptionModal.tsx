@@ -1,11 +1,12 @@
 /**
  * CareConnect — New Prescription Modal (Doctor-Facing)
  *
- * 1:1 adaptation of the web PrescriptionTemplate.tsx.
+ * 1:1 adaptation of the web NewPrescriptionSheet.tsx.
  * Two-tab layout: "Edit Form" and "Live Preview" (Rx paper pad).
+ * Wired to POST /medical-records with structured vitals.
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -16,6 +17,9 @@ import {
     StyleSheet,
     Dimensions,
     Animated,
+    ActivityIndicator,
+    Alert,
+    Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useSwipeDown from '@/hooks/useSwipeDown';
@@ -27,10 +31,15 @@ import {
     shadows,
     radii,
 } from '@/constants/theme';
+import { useAuth } from '@/hooks/useAuth';
+import { getDoctorProfile, createMedicalRecord, createAppointment, getAvailableSlots, getMe } from '@/services/doctor';
+import { ApiError } from '@/services/api';
+import type { DoctorProfile, AvailableSlot } from '@/services/types';
+import ThemedAlert from '@/components/doctor/ThemedAlert';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// ─── Types ──────────────────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────
 
 interface Medication {
     id: string;
@@ -41,26 +50,26 @@ interface Medication {
     instructions: string;
 }
 
+interface Vitals {
+    bp: string;
+    pulse: string;
+    temp: string;
+    weight: string;
+}
+
 interface NewPrescriptionModalProps {
     visible: boolean;
     onClose: () => void;
+    patientId?: string;
     patientName?: string;
     patientAge?: string;
+    patientGender?: string;
+    onPrescriptionCreated?: () => void;
 }
 
 type TabId = 'edit' | 'preview';
 
-// ─── Doctor Info (matching web) ─────────────────────────────────────────────
-
-const doctorInfo = {
-    name: 'Dr. Rohan Mehta',
-    qualification: 'MBBS, MD',
-    specialty: 'General Physician',
-    regNumber: 'MCI-12345',
-    clinic: 'CareConnect Clinic',
-    address: '42 Medical Park Rd, Bengaluru - 560001',
-    phone: '+91 98765 43210',
-};
+const emptyVitals: Vitals = { bp: '', pulse: '', temp: '', weight: '' };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -138,16 +147,20 @@ function SmallField({
     );
 }
 
-// ─── Edit Form Tab ──────────────────────────────────────────────────────────
+// ─── Edit Form Tab ────────────────────────────────────────────────────────
 
 function EditFormTab({
     formData,
     setFormData,
+    vitals,
+    setVitals,
     medications,
     setMedications,
 }: {
     formData: Record<string, string>;
     setFormData: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+    vitals: Vitals;
+    setVitals: React.Dispatch<React.SetStateAction<Vitals>>;
     medications: Medication[];
     setMedications: React.Dispatch<React.SetStateAction<Medication[]>>;
 }) {
@@ -209,12 +222,53 @@ function EditFormTab({
                 multiline
             />
 
-            <FormField
-                label="Vitals"
-                value={formData.vitals}
-                onChangeText={updateField('vitals')}
-                placeholder="BP: 120/80, Temp: 98.6°F, Pulse: 72"
-            />
+            {/* Vitals — 4-field grid matching web dashboard */}
+            <Text style={s.fieldLabel}>Vitals</Text>
+            <View style={s.vitalsRow}>
+                <View style={s.vitalField}>
+                    <Text style={s.vitalLabel}>BP (mmHg)</Text>
+                    <TextInput
+                        style={s.input}
+                        value={vitals.bp}
+                        onChangeText={(v) => setVitals(prev => ({ ...prev, bp: v }))}
+                        placeholder="120/80"
+                        placeholderTextColor={doctorColors.textMuted}
+                    />
+                </View>
+                <View style={s.vitalField}>
+                    <Text style={s.vitalLabel}>Pulse (bpm)</Text>
+                    <TextInput
+                        style={s.input}
+                        value={vitals.pulse}
+                        onChangeText={(v) => setVitals(prev => ({ ...prev, pulse: v }))}
+                        placeholder="72"
+                        placeholderTextColor={doctorColors.textMuted}
+                        keyboardType="numeric"
+                    />
+                </View>
+                <View style={s.vitalField}>
+                    <Text style={s.vitalLabel}>Temp (°F)</Text>
+                    <TextInput
+                        style={s.input}
+                        value={vitals.temp}
+                        onChangeText={(v) => setVitals(prev => ({ ...prev, temp: v }))}
+                        placeholder="98.6"
+                        placeholderTextColor={doctorColors.textMuted}
+                        keyboardType="numeric"
+                    />
+                </View>
+                <View style={s.vitalField}>
+                    <Text style={s.vitalLabel}>Weight (kg)</Text>
+                    <TextInput
+                        style={s.input}
+                        value={vitals.weight}
+                        onChangeText={(v) => setVitals(prev => ({ ...prev, weight: v }))}
+                        placeholder="70"
+                        placeholderTextColor={doctorColors.textMuted}
+                        keyboardType="numeric"
+                    />
+                </View>
+            </View>
 
             <FormField
                 label="Diagnosis"
@@ -305,8 +359,16 @@ function EditFormTab({
                 label="Follow-up Date"
                 value={formData.followUpDate}
                 onChangeText={updateField('followUpDate')}
-                placeholder="e.g., 15 Apr 2026"
+                placeholder="YYYY-MM-DD (e.g., 2026-05-15)"
             />
+
+            {/* Time Picker — shows when a valid follow-up date is entered */}
+            {/^\d{4}-\d{2}-\d{2}$/.test(formData.followUpDate) && !isNaN(Date.parse(formData.followUpDate)) && (
+                <FollowUpTimePicker
+                    value={formData.followUpTime || '09:00'}
+                    onChange={(val: string) => setFormData((prev) => ({ ...prev, followUpTime: val }))}
+                />
+            )}
         </ScrollView>
     );
 }
@@ -315,13 +377,30 @@ function EditFormTab({
 
 function PreviewTab({
     formData,
+    vitals,
     medications,
+    doctorProfile,
 }: {
     formData: Record<string, string>;
+    vitals: Vitals;
     medications: Medication[];
+    doctorProfile: DoctorProfile | null;
 }) {
     const filledMeds = medications.filter((m) => m.name.trim());
     const currentDate = formatDate();
+    const doctorName = doctorProfile?.full_name ?? 'Doctor';
+    const doctorSpec = doctorProfile?.specialization ?? '';
+    const doctorLicense = doctorProfile?.license_number ?? '';
+    const doctorPhone = doctorProfile?.phone_number ?? '';
+    const doctorLabel = [doctorSpec, doctorLicense ? `Reg No: ${doctorLicense}` : ''].filter(Boolean).join(' • ');
+
+    const hasVitals = vitals.bp || vitals.pulse || vitals.temp || vitals.weight;
+    const vitalsStr = [
+        vitals.bp && `BP: ${vitals.bp}`,
+        vitals.pulse && `Pulse: ${vitals.pulse}`,
+        vitals.temp && `Temp: ${vitals.temp}`,
+        vitals.weight && `Weight: ${vitals.weight}`,
+    ].filter(Boolean).join(', ');
 
     return (
         <ScrollView
@@ -332,15 +411,9 @@ function PreviewTab({
             <View style={s.paper}>
                 {/* Doctor Header */}
                 <View style={s.paperHeader}>
-                    <Text style={s.paperDoctorName}>{doctorInfo.name}</Text>
-                    <Text style={s.paperSubtext}>{doctorInfo.qualification}</Text>
-                    <Text style={s.paperSubtext}>{doctorInfo.specialty}</Text>
-                    <Text style={s.paperSubtext}>Reg. No: {doctorInfo.regNumber}</Text>
-                    <Text style={[s.paperClinic, { marginTop: spacing.sm }]}>
-                        {doctorInfo.clinic}
-                    </Text>
-                    <Text style={s.paperSubtext}>{doctorInfo.address}</Text>
-                    <Text style={s.paperSubtext}>Tel: {doctorInfo.phone}</Text>
+                    <Text style={s.paperDoctorName}>{doctorName}</Text>
+                    <Text style={s.paperSubtext}>{doctorLabel}</Text>
+                    {doctorPhone ? <Text style={s.paperSubtext}>Tel: {doctorPhone}</Text> : null}
                 </View>
 
                 {/* Patient Info Bar */}
@@ -365,7 +438,7 @@ function PreviewTab({
                 </Text>
 
                 {/* Chief Complaints & Vitals */}
-                {(formData.chiefComplaints || formData.vitals) ? (
+                {(formData.chiefComplaints || hasVitals) ? (
                     <View style={{ marginBottom: spacing.lg }}>
                         {formData.chiefComplaints ? (
                             <Text style={s.paperSmall}>
@@ -373,10 +446,10 @@ function PreviewTab({
                                 {formData.chiefComplaints}
                             </Text>
                         ) : null}
-                        {formData.vitals ? (
+                        {hasVitals ? (
                             <Text style={[s.paperSmall, { marginTop: spacing.xxs }]}>
                                 <Text style={s.paperBold}>Vitals: </Text>
-                                {formData.vitals}
+                                {vitalsStr}
                             </Text>
                         ) : null}
                     </View>
@@ -441,8 +514,8 @@ function PreviewTab({
                 {/* Signature */}
                 <View style={s.signatureBlock}>
                     <View style={s.signatureLine} />
-                    <Text style={s.signatureName}>{doctorInfo.name}</Text>
-                    <Text style={s.signatureQual}>{doctorInfo.qualification}</Text>
+                    <Text style={s.signatureName}>{doctorName}</Text>
+                    <Text style={s.signatureQual}>{doctorLabel}</Text>
                 </View>
 
                 {/* Disclaimer */}
@@ -456,117 +529,569 @@ function PreviewTab({
     );
 }
 
-// ─── Main Component ─────────────────────────────────────────────────────────
+// ─── Follow-Up Time Picker ──────────────────────────────────────────────────
+
+function FollowUpTimePicker({ value, onChange }: { value: string; onChange: (val: string) => void }) {
+    const [hours, minutes] = value.split(':').map(Number);
+    const pad = (n: number) => String(n).padStart(2, '0');
+
+    const setH = (h: number) => {
+        const clamped = ((h % 24) + 24) % 24;
+        onChange(`${pad(clamped)}:${pad(minutes)}`);
+    };
+    const setM = (m: number) => {
+        const clamped = ((m % 60) + 60) % 60;
+        onChange(`${pad(hours)}:${pad(clamped)}`);
+    };
+
+    return (
+        <View style={{ marginTop: spacing.md, marginBottom: spacing.lg }}>
+            <Text style={[s.fieldLabel, { marginBottom: spacing.sm }]}>Follow-up Time</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                {/* Hours */}
+                <View style={{ alignItems: 'center' }}>
+                    <Pressable onPress={() => setH(hours + 1)} hitSlop={6}>
+                        <Feather name="chevron-up" size={18} color={doctorColors.textMuted} />
+                    </Pressable>
+                    <View style={timePickerStyles.cell}>
+                        <Text style={timePickerStyles.cellText}>{pad(hours)}</Text>
+                    </View>
+                    <Pressable onPress={() => setH(hours - 1)} hitSlop={6}>
+                        <Feather name="chevron-down" size={18} color={doctorColors.textMuted} />
+                    </Pressable>
+                </View>
+
+                <Text style={{ fontFamily: typography.fontFamily.bold, fontSize: 18, color: doctorColors.textMuted }}>:</Text>
+
+                {/* Minutes */}
+                <View style={{ alignItems: 'center' }}>
+                    <Pressable onPress={() => setM(minutes + 1)} hitSlop={6}>
+                        <Feather name="chevron-up" size={18} color={doctorColors.textMuted} />
+                    </Pressable>
+                    <View style={timePickerStyles.cell}>
+                        <Text style={timePickerStyles.cellText}>{pad(minutes)}</Text>
+                    </View>
+                    <Pressable onPress={() => setM(minutes - 1)} hitSlop={6}>
+                        <Feather name="chevron-down" size={18} color={doctorColors.textMuted} />
+                    </Pressable>
+                </View>
+
+                <Text style={{ fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: doctorColors.textMuted, marginLeft: spacing.xs }}>hrs</Text>
+            </View>
+        </View>
+    );
+}
+
+const timePickerStyles = StyleSheet.create({
+    cell: {
+        width: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: doctorColors.borderLight,
+        borderRadius: radii.sm,
+        paddingVertical: spacing.sm,
+        backgroundColor: doctorColors.surface,
+    },
+    cellText: {
+        fontFamily: typography.fontFamily.medium,
+        ...typography.size.base,
+        color: doctorColors.textPrimary,
+    },
+});
+
+// ─── Slot Picker Overlay (conflict resolution) ──────────────────────────────
+
+function SlotPickerOverlay({
+    date,
+    slots,
+    loading,
+    onSelect,
+    onSkip,
+}: {
+    date: string;
+    slots: AvailableSlot[];
+    loading: boolean;
+    onSelect: (slot: AvailableSlot) => void;
+    onSkip: () => void;
+}) {
+    const [selected, setSelected] = useState<string | null>(null);
+
+    const fmtDate = new Date(date).toLocaleDateString('en-IN', {
+        weekday: 'long', day: '2-digit', month: 'short', year: 'numeric',
+    });
+
+    return (
+        <Modal transparent animationType="fade" visible>
+            <View style={slotStyles.overlay}>
+                <View style={slotStyles.card}>
+                    {/* Header */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm }}>
+                        <View style={slotStyles.warningIcon}>
+                            <Feather name="alert-circle" size={20} color="#D97706" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={slotStyles.title}>Time Slot Unavailable</Text>
+                            <Text style={slotStyles.subtitle}>The selected time is already booked</Text>
+                        </View>
+                    </View>
+
+                    {/* Date badge */}
+                    <View style={slotStyles.dateBadge}>
+                        <Feather name="calendar" size={14} color={doctorColors.textMuted} />
+                        <Text style={slotStyles.dateText}>{fmtDate}</Text>
+                    </View>
+
+                    {/* Slots */}
+                    {loading ? (
+                        <View style={{ paddingVertical: spacing['4xl'], alignItems: 'center' }}>
+                            <ActivityIndicator size="small" color={doctorColors.primary} />
+                            <Text style={{ color: doctorColors.textMuted, marginTop: spacing.sm, ...typography.size.sm }}>Loading available slots…</Text>
+                        </View>
+                    ) : slots.length === 0 ? (
+                        <View style={{ paddingVertical: spacing['4xl'], alignItems: 'center' }}>
+                            <Feather name="clock" size={28} color={doctorColors.borderLight} />
+                            <Text style={{ color: doctorColors.textMuted, marginTop: spacing.sm, ...typography.size.sm }}>No available slots on this day.</Text>
+                        </View>
+                    ) : (
+                        <>
+                            <Text style={{ ...typography.size.xs, fontFamily: typography.fontFamily.medium, color: doctorColors.textMuted, marginBottom: spacing.sm }}>Available Slots</Text>
+                            <View style={slotStyles.grid}>
+                                {slots.map((slot) => (
+                                    <Pressable
+                                        key={slot.start_time}
+                                        onPress={() => setSelected(slot.start_time)}
+                                        style={[
+                                            slotStyles.slotBtn,
+                                            selected === slot.start_time && slotStyles.slotBtnActive,
+                                        ]}
+                                    >
+                                        <Text style={[
+                                            slotStyles.slotText,
+                                            selected === slot.start_time && slotStyles.slotTextActive,
+                                        ]}>{slot.start_time}</Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+                        </>
+                    )}
+
+                    {/* Actions */}
+                    <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.xl }}>
+                        <Pressable onPress={onSkip} style={({ pressed }) => [slotStyles.skipBtn, pressed && { opacity: 0.7 }]}>
+                            <Text style={slotStyles.skipText}>Skip</Text>
+                        </Pressable>
+                        {slots.length > 0 && (
+                            <Pressable
+                                onPress={() => {
+                                    const slot = slots.find((sl) => sl.start_time === selected);
+                                    if (slot) onSelect(slot);
+                                }}
+                                disabled={!selected}
+                                style={({ pressed }) => [
+                                    slotStyles.bookBtn,
+                                    !selected && { opacity: 0.4 },
+                                    pressed && { opacity: 0.7 },
+                                ]}
+                            >
+                                <Feather name="calendar" size={14} color="#fff" />
+                                <Text style={slotStyles.bookText}>Book Follow-Up</Text>
+                            </Pressable>
+                        )}
+                    </View>
+                </View>
+            </View>
+        </Modal>
+    );
+}
+
+const slotStyles = StyleSheet.create({
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
+    card: { backgroundColor: '#fff', borderRadius: radii.lg, padding: spacing.xl, width: '100%', maxWidth: 400, ...shadows.elevated },
+    warningIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center' },
+    title: { fontFamily: typography.fontFamily.bold, ...typography.size.base, color: doctorColors.textPrimary },
+    subtitle: { fontFamily: typography.fontFamily.regular, ...typography.size.xs, color: doctorColors.textMuted },
+    dateBadge: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: doctorColors.surfaceMuted, borderRadius: radii.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginVertical: spacing.md },
+    dateText: { fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: doctorColors.textSecondary },
+    grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    slotBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radii.md, borderWidth: 1, borderColor: doctorColors.borderLight, backgroundColor: '#fff' },
+    slotBtnActive: { backgroundColor: doctorColors.primary, borderColor: doctorColors.primary },
+    slotText: { fontFamily: typography.fontFamily.medium, ...typography.size.xs, color: doctorColors.textPrimary },
+    slotTextActive: { color: '#fff' },
+    skipBtn: { flex: 1, paddingVertical: spacing.md, borderRadius: radii.md, borderWidth: 1, borderColor: doctorColors.borderLight, alignItems: 'center' },
+    skipText: { fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: doctorColors.textPrimary },
+    bookBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.md, borderRadius: radii.md, backgroundColor: doctorColors.primary },
+    bookText: { fontFamily: typography.fontFamily.semiBold, ...typography.size.sm, color: '#fff' },
+});
+
+// ─── Main Component ───────────────────────────────────────────────────
 
 export default function NewPrescriptionModal({
     visible,
     onClose,
+    patientId,
     patientName = '',
     patientAge = '',
+    patientGender = '',
+    onPrescriptionCreated,
 }: NewPrescriptionModalProps) {
     const insets = useSafeAreaInsets();
     const { panHandlers, animatedStyle } = useSwipeDown(onClose);
+    const { token } = useAuth();
     const [activeTab, setActiveTab] = useState<TabId>('edit');
+    const [doctorProfile, setDoctorProfile] = useState<DoctorProfile | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [showSlotPicker, setShowSlotPicker] = useState(false);
+    const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
+    const [slotsLoading, setSlotsLoading] = useState(false);
+    const [followUpBooked, setFollowUpBooked] = useState(false);
     const [formData, setFormData] = useState<Record<string, string>>({
         patientName,
         patientAge,
-        patientGender: '',
+        patientGender,
         diagnosis: '',
         chiefComplaints: '',
-        vitals: '',
         advice: '',
         followUpDate: '',
+        followUpTime: '09:00',
     });
+    const [vitals, setVitals] = useState<Vitals>({ ...emptyVitals });
     const [medications, setMedications] = useState<Medication[]>([emptyMedication()]);
 
+    // Fetch doctor profile on open
+    useEffect(() => {
+        if (visible && token) {
+            getDoctorProfile(token).then(setDoctorProfile).catch(() => { });
+        }
+        if (visible) {
+            setShowSuccess(false);
+            setActiveTab('edit');
+            setShowSlotPicker(false);
+            setAvailableSlots([]);
+            setFollowUpBooked(false);
+        }
+    }, [visible, token]);
+
+    // Reset form when patient changes
+    useEffect(() => {
+        setFormData(prev => ({
+            ...prev,
+            patientName,
+            patientAge,
+            patientGender,
+        }));
+    }, [patientName, patientAge, patientGender]);
+
+    const handleSaveAndSend = useCallback(async () => {
+        if (!formData.diagnosis.trim()) {
+            Alert.alert('Required', 'Please enter a diagnosis before saving.');
+            return;
+        }
+
+        // 1. Save to backend if linked to a patient
+        if (patientId && doctorProfile && token) {
+            setIsSaving(true);
+            try {
+                const hasVitals = vitals.bp || vitals.pulse || vitals.temp || vitals.weight;
+                await createMedicalRecord(token, {
+                    patient_id: patientId,
+                    doctor_id: doctorProfile.id,
+                    diagnosis: formData.diagnosis,
+                    symptoms: formData.chiefComplaints || null,
+                    treatment: formData.advice || null,
+                    follow_up_date: (/^\d{4}-\d{2}-\d{2}$/.test(formData.followUpDate) && !isNaN(Date.parse(formData.followUpDate))) ? formData.followUpDate : null,
+                    vitals: hasVitals ? { bp: vitals.bp, pulse: vitals.pulse, temp: vitals.temp, weight: vitals.weight } as Record<string, string> : null,
+                    prescriptions: medications
+                        .filter(m => m.name.trim())
+                        .map(m => ({
+                            medication_name: m.name,
+                            dosage: m.dosage || null,
+                            frequency: m.frequency || null,
+                            duration: m.duration || null,
+                            notes: m.instructions || null,
+                        })),
+                });
+
+                // ── Follow-up appointment creation ──
+                const validDate = /^\d{4}-\d{2}-\d{2}$/.test(formData.followUpDate) && !isNaN(Date.parse(formData.followUpDate));
+                if (validDate && formData.followUpTime) {
+                    try {
+                        const me = await getMe(token);
+                        const hospitalId = me?.hospital_id;
+                        if (hospitalId) {
+                            const scheduledTime = new Date(
+                                `${formData.followUpDate}T${formData.followUpTime}:00`
+                            ).toISOString();
+
+                            await createAppointment(token, {
+                                doctor_id: doctorProfile.id,
+                                patient_id: patientId,
+                                hospital_id: hospitalId,
+                                scheduled_time: scheduledTime,
+                                duration_minutes: 15,
+                                appointment_type: 'FOLLOW_UP',
+                                reason: `Follow-up: ${formData.diagnosis}`,
+                            });
+                            setFollowUpBooked(true);
+                        }
+                    } catch (followUpErr: any) {
+                        // 409 = slot conflict → show slot picker
+                        if (followUpErr instanceof ApiError && followUpErr.status === 409) {
+                            setSlotsLoading(true);
+                            setShowSlotPicker(true);
+                            try {
+                                const slots = await getAvailableSlots(
+                                    token,
+                                    doctorProfile.id,
+                                    formData.followUpDate,
+                                );
+                                setAvailableSlots(slots);
+                            } catch {
+                                setAvailableSlots([]);
+                            } finally {
+                                setSlotsLoading(false);
+                            }
+                            setIsSaving(false);
+                            // Don't proceed to success — wait for slot pick
+                            return;
+                        }
+                        // Other errors — still proceed (prescription was saved)
+                        console.error('Follow-up booking failed:', followUpErr);
+                    }
+                }
+
+                onPrescriptionCreated?.();
+            } catch (err) {
+                console.error('Failed to save prescription:', err);
+            } finally {
+                setIsSaving(false);
+            }
+        }
+
+        // 2. Switch to preview and show success
+        setActiveTab('preview');
+        setShowSuccess(true);
+    }, [formData, vitals, medications, patientId, doctorProfile, token, onPrescriptionCreated]);
+
+    // ── Handle slot pick from the conflict picker ──
+    const handleSlotPick = useCallback(async (slot: AvailableSlot) => {
+        if (!patientId || !doctorProfile || !token) return;
+        setIsSaving(true);
+        try {
+            const me = await getMe(token);
+            const hospitalId = me?.hospital_id;
+            if (!hospitalId) return;
+
+            const scheduledTime = new Date(
+                `${formData.followUpDate}T${slot.start_time}:00`
+            ).toISOString();
+
+            await createAppointment(token, {
+                doctor_id: doctorProfile.id,
+                patient_id: patientId,
+                hospital_id: hospitalId,
+                scheduled_time: scheduledTime,
+                duration_minutes: 15,
+                appointment_type: 'FOLLOW_UP',
+                reason: `Follow-up: ${formData.diagnosis}`,
+            });
+            setFollowUpBooked(true);
+        } catch (e) {
+            console.error('Failed to book follow-up:', e);
+        } finally {
+            setIsSaving(false);
+            setShowSlotPicker(false);
+            setActiveTab('preview');
+            setShowSuccess(true);
+            onPrescriptionCreated?.();
+        }
+    }, [patientId, doctorProfile, token, formData.followUpDate, formData.diagnosis, onPrescriptionCreated]);
+
+    const handleWhatsApp = useCallback(() => {
+        // Build text summary for WhatsApp
+        const doctorName = doctorProfile?.full_name ?? 'Doctor';
+        const lines: string[] = [];
+        lines.push(`*Prescription — Dr. ${doctorName}*`);
+        lines.push(`Date: ${formatDate()}`);
+        lines.push('');
+        if (formData.patientName) lines.push(`Patient: ${formData.patientName}`);
+        if (formData.chiefComplaints) lines.push(`Complaints: ${formData.chiefComplaints}`);
+        if (formData.diagnosis) lines.push(`Diagnosis: ${formData.diagnosis}`);
+        const hasV = vitals.bp || vitals.pulse || vitals.temp || vitals.weight;
+        if (hasV) {
+            const vs = [vitals.bp && `BP: ${vitals.bp}`, vitals.pulse && `Pulse: ${vitals.pulse}`, vitals.temp && `Temp: ${vitals.temp}`, vitals.weight && `Weight: ${vitals.weight}`].filter(Boolean).join(', ');
+            lines.push(`Vitals: ${vs}`);
+        }
+        lines.push('');
+        lines.push('*Medications:*');
+        medications.filter(m => m.name.trim()).forEach((m, i) => {
+            lines.push(`${i + 1}. ${m.name} ${m.dosage} - ${m.frequency} for ${m.duration}`);
+            if (m.instructions) lines.push(`   _${m.instructions}_`);
+        });
+        if (formData.advice) { lines.push(''); lines.push(`Advice: ${formData.advice}`); }
+        if (formData.followUpDate) lines.push(`Follow-up: ${formData.followUpDate}`);
+
+        const text = encodeURIComponent(lines.join('\n'));
+        Linking.openURL(`https://wa.me/?text=${text}`).catch(() =>
+            Alert.alert('Error', 'Could not open WhatsApp'),
+        );
+    }, [formData, vitals, medications, doctorProfile]);
+
     return (
-        <Modal
-            animationType="slide"
-            transparent
-            visible={visible}
-            onRequestClose={onClose}
-        >
-            {/* Backdrop */}
-            <Pressable style={s.backdrop} onPress={onClose} />
+        <>
+            <Modal
+                animationType="slide"
+                transparent
+                visible={visible}
+                onRequestClose={onClose}
+            >
+                {/* Backdrop */}
+                <Pressable style={s.backdrop} onPress={onClose} />
 
-            {/* Sheet */}
-            <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom }]}>
-                {/* Handle */}
-                <View style={s.handleRow} {...panHandlers}>
-                    <View style={s.handle} />
-                </View>
-
-                {/* Header */}
-                <View style={s.header}>
-                    <View>
-                        <Text style={s.headerTitle}>Create Prescription</Text>
-                        <Text style={s.headerSubtitle}>
-                            Fill in the details. Signature & date added automatically.
-                        </Text>
+                {/* Sheet */}
+                <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom }]}>
+                    {/* Handle */}
+                    <View style={s.handleRow} {...panHandlers}>
+                        <View style={s.handle} />
                     </View>
-                </View>
 
-                {/* Segmented Control */}
-                <View style={s.segmentRow}>
-                    {([
-                        { id: 'edit' as TabId, label: 'Edit Form', icon: 'edit-3' as const },
-                        { id: 'preview' as TabId, label: 'Preview', icon: 'eye' as const },
-                    ]).map((tab) => {
-                        const active = activeTab === tab.id;
-                        return (
-                            <Pressable
-                                key={tab.id}
-                                onPress={() => setActiveTab(tab.id)}
-                                style={[s.segmentBtn, active && s.segmentBtnActive]}
-                            >
-                                <Feather
-                                    name={tab.icon}
-                                    size={14}
-                                    color={active ? '#fff' : doctorColors.textMuted}
-                                />
-                                <Text style={[s.segmentText, active && s.segmentTextActive]}>
-                                    {tab.label}
-                                </Text>
-                            </Pressable>
-                        );
-                    })}
-                </View>
+                    {/* Header */}
+                    <View style={s.header}>
+                        <View>
+                            <Text style={s.headerTitle}>Create Prescription</Text>
+                            <Text style={s.headerSubtitle}>
+                                Fill in the details. Signature & date added automatically.
+                            </Text>
+                        </View>
+                    </View>
 
-                {/* Tab Content */}
-                {activeTab === 'edit' ? (
-                    <EditFormTab
-                        formData={formData}
-                        setFormData={setFormData}
-                        medications={medications}
-                        setMedications={setMedications}
-                    />
-                ) : (
-                    <PreviewTab formData={formData} medications={medications} />
-                )}
+                    {/* Segmented Control */}
+                    <View style={s.segmentRow}>
+                        {([
+                            { id: 'edit' as TabId, label: 'Edit Form', icon: 'edit-3' as const },
+                            { id: 'preview' as TabId, label: 'Preview', icon: 'eye' as const },
+                        ]).map((tab) => {
+                            const active = activeTab === tab.id;
+                            return (
+                                <Pressable
+                                    key={tab.id}
+                                    onPress={() => setActiveTab(tab.id)}
+                                    style={[s.segmentBtn, active && s.segmentBtnActive]}
+                                >
+                                    <Feather
+                                        name={tab.icon}
+                                        size={14}
+                                        color={active ? '#fff' : doctorColors.textMuted}
+                                    />
+                                    <Text style={[s.segmentText, active && s.segmentTextActive]}>
+                                        {tab.label}
+                                    </Text>
+                                </Pressable>
+                            );
+                        })}
+                    </View>
 
-                {/* Footer */}
-                <View style={s.footer}>
-                    <Pressable
-                        onPress={onClose}
-                        style={({ pressed }) => [s.footerOutline, pressed && { opacity: 0.7 }]}
-                    >
-                        <Text style={s.footerOutlineText}>Close</Text>
-                    </Pressable>
-                    <Pressable
-                        onPress={() => {
-                            // TODO: Generate PDF & send
-                        }}
-                        style={({ pressed }) => [
-                            s.footerPrimary,
-                            pressed && { backgroundColor: doctorColors.primaryDark },
-                        ]}
-                    >
-                        <Feather name="download" size={15} color="#fff" />
-                        <Text style={s.footerPrimaryText}>Download & Send PDF</Text>
-                    </Pressable>
-                </View>
-            </Animated.View>
-        </Modal>
+                    {/* Tab Content */}
+                    {activeTab === 'edit' ? (
+                        <EditFormTab
+                            formData={formData}
+                            setFormData={setFormData}
+                            vitals={vitals}
+                            setVitals={setVitals}
+                            medications={medications}
+                            setMedications={setMedications}
+                        />
+                    ) : (
+                        <PreviewTab formData={formData} vitals={vitals} medications={medications} doctorProfile={doctorProfile} />
+                    )}
+
+                    {/* Footer */}
+                    <View style={s.footer}>
+                        {showSuccess ? (
+                            <>
+                                <Pressable
+                                    onPress={handleWhatsApp}
+                                    style={({ pressed }) => [s.footerOutline, pressed && { opacity: 0.7 }]}
+                                >
+                                    <Feather name="message-circle" size={15} color={doctorColors.primary} />
+                                    <Text style={[s.footerOutlineText, { color: doctorColors.primary }]}>WhatsApp</Text>
+                                </Pressable>
+                                <Pressable
+                                    onPress={() => {
+                                        // PDF download requires expo-print / expo-sharing — note for later install
+                                        Alert.alert(
+                                            'PDF Download',
+                                            'PDF generation requires expo-print and expo-sharing packages. Install them with: npx expo install expo-print expo-sharing',
+                                        );
+                                    }}
+                                    style={({ pressed }) => [
+                                        s.footerPrimary,
+                                        pressed && { backgroundColor: doctorColors.primaryDark },
+                                    ]}
+                                >
+                                    <Feather name="download" size={15} color="#fff" />
+                                    <Text style={s.footerPrimaryText}>Download PDF</Text>
+                                </Pressable>
+                            </>
+                        ) : (
+                            <>
+                                <Pressable
+                                    onPress={onClose}
+                                    style={({ pressed }) => [s.footerOutline, pressed && { opacity: 0.7 }]}
+                                >
+                                    <Text style={s.footerOutlineText}>Close</Text>
+                                </Pressable>
+                                <Pressable
+                                    onPress={handleSaveAndSend}
+                                    disabled={isSaving}
+                                    style={({ pressed }) => [
+                                        s.footerPrimary,
+                                        isSaving && { opacity: 0.6 },
+                                        pressed && { backgroundColor: doctorColors.primaryDark },
+                                    ]}
+                                >
+                                    {isSaving ? (
+                                        <ActivityIndicator size="small" color="#fff" />
+                                    ) : (
+                                        <>
+                                            <Feather name="check" size={15} color="#fff" />
+                                            <Text style={s.footerPrimaryText}>Save & Preview</Text>
+                                        </>
+                                    )}
+                                </Pressable>
+                            </>
+                        )}
+                    </View>
+                </Animated.View>
+            </Modal>
+
+            <ThemedAlert
+                visible={showSuccess}
+                variant="success"
+                icon="check-circle"
+                title="Prescription Saved"
+                message={`Prescription for ${formData.patientName || 'patient'} saved successfully.${followUpBooked ? ' Follow-up appointment booked.' : ''} You can now download or share via WhatsApp.`}
+                confirmLabel="Continue"
+                onConfirm={() => setShowSuccess(false)}
+            />
+
+            {/* ── Slot Picker Overlay (conflict resolution) ── */}
+            {showSlotPicker && (
+                <SlotPickerOverlay
+                    date={formData.followUpDate}
+                    slots={availableSlots}
+                    loading={slotsLoading}
+                    onSelect={handleSlotPick}
+                    onSkip={() => {
+                        setShowSlotPicker(false);
+                        setActiveTab('preview');
+                        setShowSuccess(true);
+                        onPrescriptionCreated?.();
+                    }}
+                />
+            )}
+        </>
     );
 }
 
@@ -683,6 +1208,22 @@ const s = StyleSheet.create({
         flexDirection: 'row',
         gap: spacing.sm,
         marginBottom: spacing.lg,
+    },
+    vitalsRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: spacing.sm,
+        marginBottom: spacing.lg,
+    },
+    vitalField: {
+        flex: 1,
+        minWidth: '45%',
+    },
+    vitalLabel: {
+        fontFamily: typography.fontFamily.regular,
+        fontSize: 10,
+        color: doctorColors.textMuted,
+        marginBottom: spacing.xxs,
     },
     smallFieldGroup: { flex: 1 },
     separator: {

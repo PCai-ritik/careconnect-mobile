@@ -6,18 +6,21 @@
  * Uses doctorColors tokens + StyleSheet.create().
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     View,
     Text,
     ScrollView,
     Pressable,
     StyleSheet,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { getDoctorProfile } from '@/services/doctor';
+import type { DoctorProfile } from '@/services/types';
 import {
     spacing,
     doctorColors,
@@ -30,6 +33,7 @@ import PayoutMethodsModal from '@/components/doctor/PayoutMethodsModal';
 import PrivacySecurityModal from '@/components/doctor/PrivacySecurityModal';
 import HelpCenterModal from '@/components/doctor/HelpCenterModal';
 import TermsOfServiceModal from '@/components/doctor/TermsOfServiceModal';
+import AvailabilityModal from '@/components/doctor/AvailabilityModal';
 import ThemedAlert from '@/components/doctor/ThemedAlert';
 
 // ─── Avatar Helper ──────────────────────────────────────────────────────────
@@ -96,16 +100,35 @@ function SettingsRow({
 
 export default function ProfileScreen() {
     const router = useRouter();
-    const { logout } = useAuth();
+    const { token, logout } = useAuth();
     const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
     const [isPayoutsOpen, setIsPayoutsOpen] = useState(false);
     const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
     const [isHelpOpen, setIsHelpOpen] = useState(false);
     const [isTermsOpen, setIsTermsOpen] = useState(false);
     const [showLogoutAlert, setShowLogoutAlert] = useState(false);
+    const [isAvailabilityOpen, setIsAvailabilityOpen] = useState(false);
 
-    const doctorName = 'Dr. Robert Chen';
+    // Real profile data from API
+    const [profile, setProfile] = useState<DoctorProfile | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!token) return;
+        getDoctorProfile(token)
+            .then(setProfile)
+            .catch((e) => console.error('Failed to load profile:', e))
+            .finally(() => setLoading(false));
+    }, [token]);
+
+    const doctorName = profile?.full_name ?? 'Doctor';
     const avatarBg = AVATAR_COLORS[hashName(doctorName) % AVATAR_COLORS.length];
+    const specialization = profile?.specialization ?? '—';
+    const licenseNumber = profile?.license_number ?? '—';
+    const consultationFee = profile?.consultation_fee
+        ? `${profile.currency === 'INR' ? '₹' : profile.currency} ${profile.consultation_fee}`
+        : '—';
+    const whatsappNumber = profile?.phone_number ?? '—';
 
     return (
         <SafeAreaView style={s.container} edges={['top']}>
@@ -125,7 +148,7 @@ export default function ProfileScreen() {
                     </View>
                     <Text style={s.heroName}>{doctorName}</Text>
                     <Text style={s.heroSubtext}>
-                        Cardiologist  •  Reg No: NMC-78291
+                        {specialization}  •  Reg No: {licenseNumber}
                     </Text>
                     <Pressable
                         style={({ pressed }) => [
@@ -145,13 +168,24 @@ export default function ProfileScreen() {
                     <SettingsRow
                         icon="dollar-sign"
                         label="Consultation Fee"
-                        rightText="₹ 500"
+                        rightText={consultationFee}
                         showBorder
                     />
                     <SettingsRow
                         icon="message-circle"
                         label="WhatsApp Number"
-                        rightText="+1 234 567 8900"
+                        rightText={whatsappNumber}
+                    />
+                </View>
+
+                {/* ── Group 2: Schedule ── */}
+                <Text style={s.groupTitle}>Schedule</Text>
+                <View style={s.card}>
+                    <SettingsRow
+                        icon="clock"
+                        label="Availability"
+                        subtitle="Manage your consultation hours"
+                        onPress={() => setIsAvailabilityOpen(true)}
                     />
                 </View>
 
@@ -204,6 +238,14 @@ export default function ProfileScreen() {
             <EditProfileModal
                 visible={isEditProfileOpen}
                 onClose={() => setIsEditProfileOpen(false)}
+                profile={profile}
+                onSaved={() => {
+                    if (token) {
+                        getDoctorProfile(token)
+                            .then(setProfile)
+                            .catch((e) => console.error('Failed to reload profile:', e));
+                    }
+                }}
             />
             <PayoutMethodsModal
                 visible={isPayoutsOpen}
@@ -220,6 +262,18 @@ export default function ProfileScreen() {
             <TermsOfServiceModal
                 visible={isTermsOpen}
                 onClose={() => setIsTermsOpen(false)}
+            />
+            <AvailabilityModal
+                visible={isAvailabilityOpen}
+                onClose={() => setIsAvailabilityOpen(false)}
+                profile={profile}
+                onSaved={() => {
+                    if (token) {
+                        getDoctorProfile(token)
+                            .then(setProfile)
+                            .catch((e) => console.error('Failed to reload profile:', e));
+                    }
+                }}
             />
             <ThemedAlert
                 visible={showLogoutAlert}

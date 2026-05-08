@@ -5,7 +5,6 @@
  * then reveals the underlying route (Login by default via initialRouteName).
  * Wraps the app in AuthProvider + ThemeProvider.
  */
-
 import { useEffect, useState } from 'react';
 import { useFonts } from 'expo-font';
 import {
@@ -68,7 +67,7 @@ export default function RootLayout() {
       <ThemeProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(patient)" />
+          <Stack.Screen name="(caregiver)" />
           <Stack.Screen name="(doctor)" />
           <Stack.Screen name="+not-found" />
         </Stack>

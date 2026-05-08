@@ -6,6 +6,9 @@
  * to all children via the useAuth hook.
  *
  * Uses expo-secure-store for token persistence (NEVER AsyncStorage).
+ *
+ * Auth state maps to backend Token schema:
+ *   { access_token, token_type, user_id, role }
  */
 
 import React, { createContext, useState, useEffect, useCallback, type ReactNode } from 'react';
@@ -14,14 +17,12 @@ import type { AuthResponse } from '@/services/types';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type UserType = 'patient' | 'doctor';
+export type UserRole = 'CAREGIVER' | 'DOCTOR' | 'SUPER_ADMIN';
 
 export interface AuthUser {
     id: string;
-    email: string;
-    fullName: string;
-    userType: UserType;
-    onboardingCompleted?: boolean;
+    role: UserRole;
+    hospitalId?: string;
 }
 
 export interface AuthContextValue {
@@ -35,7 +36,6 @@ export interface AuthContextValue {
 // ─── Secure Storage Keys ────────────────────────────────────────────────────
 
 const TOKEN_KEY = 'careconnect_auth_token';
-const REFRESH_KEY = 'careconnect_refresh_token';
 const USER_KEY = 'careconnect_user';
 
 // ─── Context ────────────────────────────────────────────────────────────────
@@ -76,7 +76,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 // Corrupted storage or native module not available — clear and start fresh
                 try {
                     await SecureStore.deleteItemAsync(TOKEN_KEY);
-                    await SecureStore.deleteItemAsync(REFRESH_KEY);
                     await SecureStore.deleteItemAsync(USER_KEY);
                 } catch {
                     // SecureStore not available (e.g. first Expo Go boot) — ignore
@@ -91,27 +90,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const login = useCallback(async (response: AuthResponse) => {
         const authUser: AuthUser = {
-            id: response.user.id,
-            email: response.user.email,
-            fullName: response.user.fullName,
-            userType: response.user.userType,
-            onboardingCompleted: response.user.onboardingCompleted,
+            id: response.user_id,
+            role: response.role,
+            hospitalId: response.hospital_id,
         };
 
         await Promise.all([
-            SecureStore.setItemAsync(TOKEN_KEY, response.token),
-            SecureStore.setItemAsync(REFRESH_KEY, response.refreshToken),
+            SecureStore.setItemAsync(TOKEN_KEY, response.access_token),
             SecureStore.setItemAsync(USER_KEY, JSON.stringify(authUser)),
         ]);
 
-        setToken(response.token);
+        setToken(response.access_token);
         setUser(authUser);
     }, []);
 
     const logout = useCallback(async () => {
         await Promise.all([
             SecureStore.deleteItemAsync(TOKEN_KEY),
-            SecureStore.deleteItemAsync(REFRESH_KEY),
             SecureStore.deleteItemAsync(USER_KEY),
         ]);
 

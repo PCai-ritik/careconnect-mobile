@@ -1,14 +1,14 @@
 /**
  * CareConnect — Doctor Appointments Tab
  *
- * Two-view layout via segmented control:
- *   1. All Appointments — searchable, paginated list of upcoming & completed
- *   2. Pending Requests — incoming patient requests with Accept/Reschedule
+ * Flat list of all appointments (no pending tab — instant confirmation).
+ * Matches web dashboard schedule/page.tsx 1:1.
  *
+ * Features: search, pagination, Emergency Reschedule (cancel), Join Call.
  * Uses doctorColors tokens + StyleSheet.create(). No Nativewind.
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     View,
     Text,
@@ -16,6 +16,8 @@ import {
     FlatList,
     Pressable,
     StyleSheet,
+    ActivityIndicator,
+    RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -27,17 +29,14 @@ import {
     shadows,
     radii,
 } from '@/constants/theme';
-import {
-    mockDoctorAppointments,
-    type DoctorAppointment,
-} from '@/services/mock-data';
+import { useAuth } from '@/hooks/useAuth';
+import { getAppointments, getPatients, updateAppointmentStatus } from '@/services/doctor';
+import type { Appointment, PatientProfile, AppointmentStatus } from '@/services/types';
 import ThemedAlert from '@/components/doctor/ThemedAlert';
-import RescheduleModal from '@/components/doctor/RescheduleModal';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-type TabId = 'appointments' | 'requests';
-const PAGE_SIZE = 4;
+// Constants removed
 
 const AVATAR_COLORS = [
     '#E8D5C4', '#C4D7E8', '#D5E8C4', '#E8C4D5', '#C4E8D7',
@@ -54,6 +53,58 @@ function hashName(name: string): number {
 
 function avatarColor(name: string): string {
     return AVATAR_COLORS[hashName(name) % AVATAR_COLORS.length];
+}
+
+// ─── Helpers (matching web) ─────────────────────────────────────────────────
+
+/** Map backend status → display status */
+function mapStatus(s: AppointmentStatus): 'upcoming' | 'completed' {
+    if (s === 'COMPLETED' || s === 'CANCELLED') return 'completed';
+    return 'upcoming'; // CONFIRMED, IN_PROGRESS → upcoming
+}
+
+function formatDate(iso: string): string {
+    const d = new Date(iso);
+    const now = new Date();
+    if (d.toDateString() === now.toDateString()) return 'Today';
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (d.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatTime(iso: string): string {
+    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+/** Enriched display appointment */
+interface DisplayAppointment {
+    id: string;
+    patientName: string;
+    date: string;
+    time: string;
+    type: string;
+    displayStatus: 'upcoming' | 'completed';
+    reason: string | null;
+}
+
+function enrichAppointments(
+    appointments: Appointment[],
+    patients: PatientProfile[],
+): DisplayAppointment[] {
+    const patientMap = new Map(patients.map((p) => [p.id, p.full_name]));
+    return appointments.map((a) => ({
+        id: a.id,
+        patientName: patientMap.get(a.patient_id) ?? 'Unknown Patient',
+        date: formatDate(a.scheduled_time),
+        time: formatTime(a.scheduled_time),
+        type: a.appointment_type === 'VIDEO' ? 'Video Consultation'
+            : a.appointment_type === 'FOLLOW_UP' ? 'Follow-up'
+                : a.appointment_type === 'NEW_PATIENT' ? 'New Patient'
+                    : 'In-Person',
+        displayStatus: mapStatus(a.status),
+        reason: a.reason,
+    }));
 }
 
 // ─── Sub-Components ─────────────────────────────────────────────────────────
@@ -76,8 +127,8 @@ function Avatar({ name, size = 44 }: { name: string; size?: number }) {
     );
 }
 
-function StatusBadge({ status }: { status: DoctorAppointment['status'] }) {
-    const isUpcoming = status === 'upcoming' || status === 'scheduled';
+function StatusBadge({ status }: { status: 'upcoming' | 'completed' }) {
+    const isUpcoming = status === 'upcoming';
     return (
         <View
             style={[
@@ -97,23 +148,24 @@ function StatusBadge({ status }: { status: DoctorAppointment['status'] }) {
                     { color: isUpcoming ? '#15803D' : '#64748B' },
                 ]}
             >
-                {isUpcoming ? 'Upcoming' : 'Completed'}
+                {isUpcoming ? 'Confirmed' : 'Completed'}
             </Text>
         </View>
     );
 }
 
-// ─── Appointment Card ───────────────────────────────────────────────────────
+// ─── Appointment Card (matches web row layout) ──────────────────────────────
 
 function AppointmentCard({
     appointment,
     onJoin,
+    onReschedule,
 }: {
-    appointment: DoctorAppointment;
+    appointment: DisplayAppointment;
     onJoin: () => void;
+    onReschedule: () => void;
 }) {
-    const isUpcoming =
-        appointment.status === 'upcoming' || appointment.status === 'scheduled';
+    const isUpcoming = appointment.displayStatus === 'upcoming';
 
     return (
         <View style={s.card}>
@@ -127,22 +179,34 @@ function AppointmentCard({
                     </Text>
                     <Text style={s.cardType}>{appointment.type}</Text>
                 </View>
-                <StatusBadge status={appointment.status} />
+                <StatusBadge status={appointment.displayStatus} />
             </View>
 
             {/* Action row */}
             <View style={s.cardActions}>
                 {isUpcoming ? (
-                    <Pressable
-                        style={({ pressed }) => [
-                            s.joinBtn,
-                            pressed && { opacity: 0.85 },
-                        ]}
-                        onPress={onJoin}
-                    >
-                        <Feather name="video" size={15} color="#fff" />
-                        <Text style={s.joinBtnText}>Join Call</Text>
-                    </Pressable>
+                    <>
+                        <Pressable
+                            style={({ pressed }) => [
+                                s.rescheduleBtn,
+                                pressed && { opacity: 0.85 },
+                            ]}
+                            onPress={onReschedule}
+                        >
+                            <Feather name="calendar" size={15} color="#D97706" />
+                            <Text style={s.rescheduleBtnText}>Reschedule</Text>
+                        </Pressable>
+                        <Pressable
+                            style={({ pressed }) => [
+                                s.joinBtn,
+                                pressed && { opacity: 0.85 },
+                            ]}
+                            onPress={onJoin}
+                        >
+                            <Feather name="video" size={15} color="#fff" />
+                            <Text style={s.joinBtnText}>Join Call</Text>
+                        </Pressable>
+                    </>
                 ) : (
                     <Pressable
                         style={({ pressed }) => [
@@ -160,335 +224,212 @@ function AppointmentCard({
     );
 }
 
-// ─── Request Card ───────────────────────────────────────────────────────────
-
-function RequestCard({
-    appointment,
-    onAccept,
-    onReschedule,
-}: {
-    appointment: DoctorAppointment;
-    onAccept: () => void;
-    onReschedule: () => void;
-}) {
-    return (
-        <View style={s.card}>
-            {/* Top row */}
-            <View style={s.cardTop}>
-                <Avatar name={appointment.patientName} size={46} />
-                <View style={s.cardInfo}>
-                    <Text style={s.cardName}>{appointment.patientName}</Text>
-                    <Text style={s.cardMeta}>
-                        {appointment.date}  •  {appointment.time}
-                    </Text>
-                    <Text style={s.cardType}>{appointment.type}</Text>
-                </View>
-            </View>
-
-            {/* Reason */}
-            {appointment.reason ? (
-                <View style={s.reasonBox}>
-                    <Text style={s.reasonLabel}>Reason for visit</Text>
-                    <Text style={s.reasonText}>{appointment.reason}</Text>
-                </View>
-            ) : null}
-
-            {/* Actions */}
-            <View style={s.requestActions}>
-                <Pressable
-                    style={({ pressed }) => [
-                        s.rescheduleBtn,
-                        pressed && { opacity: 0.7 },
-                    ]}
-                    onPress={onReschedule}
-                >
-                    <Feather name="calendar" size={15} color={doctorColors.primary} />
-                    <Text style={s.rescheduleBtnText}>Reschedule</Text>
-                </Pressable>
-                <Pressable
-                    style={({ pressed }) => [
-                        s.acceptBtn,
-                        pressed && { opacity: 0.85 },
-                    ]}
-                    onPress={onAccept}
-                >
-                    <Feather name="check" size={15} color="#fff" />
-                    <Text style={s.acceptBtnText}>Accept</Text>
-                </Pressable>
-            </View>
-        </View>
-    );
-}
-
-// ─── Pagination Footer ──────────────────────────────────────────────────────
-
-function PaginationFooter({
-    page,
-    totalPages,
-    onPrev,
-    onNext,
-}: {
-    page: number;
-    totalPages: number;
-    onPrev: () => void;
-    onNext: () => void;
-}) {
-    return (
-        <View style={s.pagination}>
-            <Pressable
-                style={({ pressed }) => [
-                    s.pageBtn,
-                    page <= 1 && s.pageBtnDisabled,
-                    pressed && page > 1 && { opacity: 0.7 },
-                ]}
-                onPress={onPrev}
-                disabled={page <= 1}
-            >
-                <Feather
-                    name="chevron-left"
-                    size={16}
-                    color={page <= 1 ? doctorColors.textMuted : doctorColors.primary}
-                />
-                <Text
-                    style={[
-                        s.pageBtnText,
-                        page <= 1 && s.pageBtnTextDisabled,
-                    ]}
-                >
-                    Prev
-                </Text>
-            </Pressable>
-
-            <Text style={s.pageIndicator}>
-                Page {page} of {totalPages}
-            </Text>
-
-            <Pressable
-                style={({ pressed }) => [
-                    s.pageBtn,
-                    page >= totalPages && s.pageBtnDisabled,
-                    pressed && page < totalPages && { opacity: 0.7 },
-                ]}
-                onPress={onNext}
-                disabled={page >= totalPages}
-            >
-                <Text
-                    style={[
-                        s.pageBtnText,
-                        page >= totalPages && s.pageBtnTextDisabled,
-                    ]}
-                >
-                    Next
-                </Text>
-                <Feather
-                    name="chevron-right"
-                    size={16}
-                    color={page >= totalPages ? doctorColors.textMuted : doctorColors.primary}
-                />
-            </Pressable>
-        </View>
-    );
-}
+// Removed PaginationFooter
 
 // ─── Main Screen ────────────────────────────────────────────────────────────
 
 export default function AppointmentsScreen() {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<TabId>('appointments');
+    const { token } = useAuth();
     const [search, setSearch] = useState('');
-    const [page, setPage] = useState(1);
-    const [allAppointments, setAllAppointments] = useState<DoctorAppointment[]>(
-        () => [...mockDoctorAppointments],
-    );
+    const [visibleCount, setVisibleCount] = useState(10);
 
-    // Accept/Reschedule state
-    const [showAcceptAlert, setShowAcceptAlert] = useState(false);
-    const [acceptedPatientName, setAcceptedPatientName] = useState('');
-    const [rescheduleTarget, setRescheduleTarget] = useState<DoctorAppointment | null>(null);
-    const [isRescheduleOpen, setIsRescheduleOpen] = useState(false);
+    // Real data from API
+    const [displayAppointments, setDisplayAppointments] = useState<DisplayAppointment[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
-    // ── Filtered data ──
-    const appointments = useMemo(() => {
-        const base = allAppointments.filter(
-            (a) => a.status !== 'pending',
-        );
-        if (!search.trim()) return base;
+    // Emergency Reschedule state (matches web)
+    const [rescheduleTarget, setRescheduleTarget] = useState<DisplayAppointment | null>(null);
+    const [showRescheduleAlert, setShowRescheduleAlert] = useState(false);
+    const [actionLoading, setActionLoading] = useState(false);
+    const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+    const [cancelledName, setCancelledName] = useState('');
+
+    const fetchData = useCallback(async () => {
+        if (!token) return;
+        try {
+            const [rawAppts, rawPatients] = await Promise.all([
+                getAppointments(token),
+                getPatients(token),
+            ]);
+            setDisplayAppointments(enrichAppointments(rawAppts, rawPatients));
+        } catch (e) {
+            console.error('Failed to load appointments:', e);
+        }
+    }, [token]);
+
+    useEffect(() => {
+        fetchData().finally(() => setLoading(false));
+    }, [fetchData]);
+
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        await fetchData();
+        setRefreshing(false);
+    }, [fetchData]);
+
+    // ── Filtered & paginated data ──
+    const filtered = useMemo(() => {
+        if (!search.trim()) return displayAppointments;
         const q = search.toLowerCase();
-        return base.filter((a) => a.patientName.toLowerCase().includes(q));
-    }, [search, allAppointments]);
+        return displayAppointments.filter((a) => a.patientName.toLowerCase().includes(q));
+    }, [search, displayAppointments]);
 
-    const requests = useMemo(
-        () => allAppointments.filter((a) => a.status === 'pending'),
-        [allAppointments],
-    );
+    const upcomingCount = filtered.filter((a) => a.displayStatus === 'upcoming').length;
+    const completedCount = filtered.filter((a) => a.displayStatus === 'completed').length;
 
-    // ── Pagination ──
-    const totalPages = Math.max(1, Math.ceil(appointments.length / PAGE_SIZE));
-    const pagedAppointments = appointments.slice(
-        (page - 1) * PAGE_SIZE,
-        page * PAGE_SIZE,
-    );
+    const visibleAppointments = filtered.slice(0, visibleCount);
 
-    // Reset page when search changes
     const handleSearch = (text: string) => {
         setSearch(text);
-        setPage(1);
+        setVisibleCount(10);
     };
 
-    // ── Accept handler ──
-    const handleAccept = useCallback((appointment: DoctorAppointment) => {
-        setAcceptedPatientName(appointment.patientName);
-        setAllAppointments((prev) =>
-            prev.map((a) =>
-                a.id === appointment.id ? { ...a, status: 'upcoming' as const } : a,
-            ),
-        );
-        setShowAcceptAlert(true);
-    }, []);
+    const loadMore = useCallback(() => {
+        if (visibleCount < filtered.length) {
+            setVisibleCount((prev) => prev + 10);
+        }
+    }, [visibleCount, filtered.length]);
 
-    // ── Reschedule handler ──
-    const handleRescheduleOpen = useCallback((appointment: DoctorAppointment) => {
-        setRescheduleTarget(appointment);
-        setIsRescheduleOpen(true);
-    }, []);
-
-    const handleRescheduleConfirm = useCallback((date: string, time: string) => {
-        if (!rescheduleTarget) return;
-        setAllAppointments((prev) =>
-            prev.map((a) =>
-                a.id === rescheduleTarget.id
-                    ? { ...a, date, time, status: 'pending' as const }
-                    : a,
-            ),
-        );
-        setIsRescheduleOpen(false);
-        setRescheduleTarget(null);
-    }, [rescheduleTarget]);
+    // ── Emergency Reschedule (cancel) handler — matches web ──
+    const handleEmergencyReschedule = useCallback(async () => {
+        if (!rescheduleTarget || !token) return;
+        setActionLoading(true);
+        try {
+            await updateAppointmentStatus(token, rescheduleTarget.id, 'CANCELLED');
+            // Update local state
+            setDisplayAppointments((prev) =>
+                prev.map((a) =>
+                    a.id === rescheduleTarget.id
+                        ? { ...a, displayStatus: 'completed' as const }
+                        : a,
+                ),
+            );
+            setCancelledName(rescheduleTarget.patientName);
+            setShowRescheduleAlert(false);
+            setRescheduleTarget(null);
+            setShowSuccessAlert(true);
+        } catch (e) {
+            console.error('Failed to cancel appointment:', e);
+        } finally {
+            setActionLoading(false);
+        }
+    }, [rescheduleTarget, token]);
 
     return (
         <SafeAreaView style={s.container} edges={['top']}>
             {/* ── Header ── */}
             <View style={s.header}>
                 <Text style={s.headerTitle}>Appointments</Text>
+                <Text style={s.headerSubtitle}>
+                    All appointments are instantly confirmed
+                </Text>
             </View>
 
-            {/* ── Segmented Control ── */}
-            <View style={s.segmentRow}>
-                {([
-                    { id: 'appointments' as TabId, label: 'All Appointments', icon: 'calendar' as const },
-                    { id: 'requests' as TabId, label: `Pending (${requests.length})`, icon: 'inbox' as const },
-                ]).map((tab) => {
-                    const active = activeTab === tab.id;
-                    return (
-                        <Pressable
-                            key={tab.id}
-                            onPress={() => setActiveTab(tab.id)}
-                            style={[s.segmentBtn, active && s.segmentBtnActive]}
-                        >
-                            <Feather
-                                name={tab.icon}
-                                size={14}
-                                color={active ? '#fff' : doctorColors.textMuted}
-                            />
-                            <Text style={[s.segmentText, active && s.segmentTextActive]}>
-                                {tab.label}
-                            </Text>
-                        </Pressable>
-                    );
-                })}
-            </View>
-
-            {/* ── Tab Content ── */}
-            {activeTab === 'appointments' ? (
-                <View style={s.tabContent}>
-                    {/* Search Bar */}
-                    <View style={s.searchBar}>
-                        <Feather name="search" size={18} color={doctorColors.textMuted} />
-                        <TextInput
-                            style={s.searchInput}
-                            placeholder="Search patients..."
-                            placeholderTextColor={doctorColors.textMuted}
-                            value={search}
-                            onChangeText={handleSearch}
-                        />
-                        {search.length > 0 && (
-                            <Pressable onPress={() => handleSearch('')} hitSlop={8}>
-                                <Feather name="x" size={16} color={doctorColors.textMuted} />
-                            </Pressable>
-                        )}
-                    </View>
-
-                    {/* List */}
-                    <FlatList
-                        data={pagedAppointments}
-                        keyExtractor={(item) => item.id}
-                        renderItem={({ item }) => (
-                            <AppointmentCard
-                                appointment={item}
-                                onJoin={() =>
-                                    router.push(`/(doctor)/consultation/${item.id}`)
-                                }
-                            />
-                        )}
-                        contentContainerStyle={s.listContent}
-                        showsVerticalScrollIndicator={false}
-                        ListEmptyComponent={
-                            <View style={s.emptyState}>
-                                <Feather name="search" size={40} color={doctorColors.textMuted} />
-                                <Text style={s.emptyText}>No appointments found</Text>
-                            </View>
-                        }
-                        ListFooterComponent={
-                            appointments.length > 0 ? (
-                                <PaginationFooter
-                                    page={page}
-                                    totalPages={totalPages}
-                                    onPrev={() => setPage((p) => Math.max(1, p - 1))}
-                                    onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
-                                />
-                            ) : null
-                        }
-                    />
+            {/* ── Status Pills (matching web) ── */}
+            <View style={s.statusRow}>
+                <View style={s.statusPill}>
+                    <View style={[s.statusDot, { backgroundColor: '#22C55E' }]} />
+                    <Text style={s.statusText}>{upcomingCount} upcoming</Text>
                 </View>
-            ) : (
-                <FlatList
-                    data={requests}
-                    keyExtractor={(item) => item.id}
-                    renderItem={({ item }) => (
-                        <RequestCard
-                            appointment={item}
-                            onAccept={() => handleAccept(item)}
-                            onReschedule={() => handleRescheduleOpen(item)}
-                        />
-                    )}
-                    contentContainerStyle={s.listContent}
-                    showsVerticalScrollIndicator={false}
-                    ListEmptyComponent={
-                        <View style={s.emptyState}>
-                            <Feather name="inbox" size={40} color={doctorColors.textMuted} />
-                            <Text style={s.emptyText}>No pending requests</Text>
-                        </View>
-                    }
-                />
-            )}
+                <View style={s.statusDivider} />
+                <View style={s.statusPill}>
+                    <View style={[s.statusDot, { backgroundColor: '#94A3B8' }]} />
+                    <Text style={s.statusText}>{completedCount} completed</Text>
+                </View>
+            </View>
 
-            {/* ── Accept Alert ── */}
-            <ThemedAlert
-                visible={showAcceptAlert}
-                variant="success"
-                icon="check-circle"
-                title="Appointment Accepted"
-                message={`${acceptedPatientName}'s appointment has been accepted and added to your schedule.`}
-                confirmLabel="Done"
-                onConfirm={() => setShowAcceptAlert(false)}
+            {/* ── Search Bar ── */}
+            <View style={s.searchBar}>
+                <Feather name="search" size={18} color={doctorColors.textMuted} />
+                <TextInput
+                    style={s.searchInput}
+                    placeholder="Search patients..."
+                    placeholderTextColor={doctorColors.textMuted}
+                    value={search}
+                    onChangeText={handleSearch}
+                />
+                {search.length > 0 && (
+                    <Pressable onPress={() => handleSearch('')} hitSlop={8}>
+                        <Feather name="x" size={16} color={doctorColors.textMuted} />
+                    </Pressable>
+                )}
+            </View>
+
+            {/* ── List ── */}
+            <FlatList
+                data={visibleAppointments}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                    <AppointmentCard
+                        appointment={item}
+                        onJoin={() =>
+                            router.push(`/(doctor)/consultation/${item.id}`)
+                        }
+                        onReschedule={() => {
+                            setRescheduleTarget(item);
+                            setShowRescheduleAlert(true);
+                        }}
+                    />
+                )}
+                contentContainerStyle={s.listContent}
+                showsVerticalScrollIndicator={false}
+                onEndReached={loadMore}
+                onEndReachedThreshold={0.5}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={doctorColors.primary}
+                    />
+                }
+                ListEmptyComponent={
+                    loading ? (
+                        <View style={s.emptyState}>
+                            <ActivityIndicator size="large" color={doctorColors.primary} />
+                        </View>
+                    ) : (
+                        <View style={s.emptyState}>
+                            <Feather name="search" size={40} color={doctorColors.textMuted} />
+                            <Text style={s.emptyText}>No appointments found</Text>
+                        </View>
+                    )
+                }
+                ListFooterComponent={
+                    visibleCount < filtered.length ? (
+                        <View style={{ paddingVertical: spacing.lg, alignItems: 'center' }}>
+                            <ActivityIndicator size="small" color={doctorColors.primary} />
+                        </View>
+                    ) : null
+                }
             />
 
-            {/* ── Reschedule Modal ── */}
-            <RescheduleModal
-                visible={isRescheduleOpen}
-                patientName={rescheduleTarget?.patientName ?? ''}
-                onClose={() => { setIsRescheduleOpen(false); setRescheduleTarget(null); }}
-                onConfirm={handleRescheduleConfirm}
+            {/* ── Emergency Reschedule Confirmation (matches web modal) ── */}
+            <ThemedAlert
+                visible={showRescheduleAlert}
+                variant="warning"
+                icon="alert-triangle"
+                title="Emergency Reschedule"
+                message={`This will cancel ${rescheduleTarget?.patientName ?? ''}'s appointment and notify them via WhatsApp with rescheduling options.`}
+                confirmLabel={actionLoading ? 'Cancelling...' : 'Reschedule'}
+                cancelLabel="Cancel"
+                onConfirm={handleEmergencyReschedule}
+                onCancel={() => {
+                    setShowRescheduleAlert(false);
+                    setRescheduleTarget(null);
+                }}
+            />
+
+            {/* ── Success Alert ── */}
+            <ThemedAlert
+                visible={showSuccessAlert}
+                variant="success"
+                icon="check-circle"
+                title="Appointment Cancelled"
+                message={`${cancelledName}'s appointment has been cancelled. They will be notified via WhatsApp.`}
+                confirmLabel="Done"
+                onConfirm={() => setShowSuccessAlert(false)}
             />
         </SafeAreaView>
     );
@@ -513,41 +454,41 @@ const s = StyleSheet.create({
         ...typography.size['2xl'],
         color: doctorColors.textPrimary,
     },
-
-    // Segmented Control
-    segmentRow: {
-        flexDirection: 'row',
-        marginHorizontal: spacing.xl,
-        backgroundColor: doctorColors.surfaceMuted,
-        borderRadius: radii.md,
-        padding: spacing.xxs,
-        marginBottom: spacing.lg,
+    headerSubtitle: {
+        fontFamily: typography.fontFamily.regular,
+        ...typography.size.sm,
+        color: doctorColors.textMuted,
+        marginTop: spacing.xs,
     },
-    segmentBtn: {
-        flex: 1,
+
+    // Status Pills (matching web)
+    statusRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
+        paddingHorizontal: spacing.xl,
+        marginBottom: spacing.md,
+        gap: spacing.md,
+    },
+    statusPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
         gap: spacing.xs,
-        paddingVertical: spacing.md,
-        borderRadius: radii.sm,
     },
-    segmentBtnActive: {
-        backgroundColor: doctorColors.primary,
-        ...shadows.card,
+    statusDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
     },
-    segmentText: {
-        fontFamily: typography.fontFamily.medium,
+    statusText: {
+        fontFamily: typography.fontFamily.regular,
         ...typography.size.sm,
         color: doctorColors.textMuted,
     },
-    segmentTextActive: {
-        color: '#fff',
-        fontFamily: typography.fontFamily.semiBold,
+    statusDivider: {
+        width: 1,
+        height: 16,
+        backgroundColor: doctorColors.border,
     },
-
-    // Tab content
-    tabContent: { flex: 1 },
 
     // Search bar
     searchBar: {
@@ -637,11 +578,13 @@ const s = StyleSheet.create({
 
     // Card actions
     cardActions: {
+        flexDirection: 'row',
         marginTop: spacing.md,
         paddingTop: spacing.md,
         borderTopWidth: 1,
         borderTopColor: doctorColors.borderLight,
-        alignItems: 'flex-end',
+        justifyContent: 'flex-end',
+        gap: spacing.sm,
     },
     joinBtn: {
         flexDirection: 'row',
@@ -673,97 +616,26 @@ const s = StyleSheet.create({
         color: doctorColors.primary,
     },
 
-    // Request card extras
-    reasonBox: {
-        marginTop: spacing.md,
-        padding: spacing.md,
-        backgroundColor: doctorColors.surfaceMuted,
-        borderRadius: radii.md,
-    },
-    reasonLabel: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.xs,
-        color: doctorColors.textSecondary,
-        marginBottom: spacing.xs,
-    },
-    reasonText: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
-        lineHeight: 20,
-    },
-    requestActions: {
-        flexDirection: 'row',
-        gap: spacing.md,
-        marginTop: spacing.lg,
-    },
+    // Emergency Reschedule button (amber theme — matches web)
     rescheduleBtn: {
-        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: spacing.sm,
-        paddingVertical: spacing.md,
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.lg,
         borderRadius: radii.md,
         borderWidth: 1,
-        borderColor: doctorColors.border,
+        borderColor: '#FDE68A',
+        backgroundColor: '#FFFBEB',
     },
     rescheduleBtnText: {
         fontFamily: typography.fontFamily.medium,
         ...typography.size.sm,
-        color: doctorColors.primary,
-    },
-    acceptBtn: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: spacing.sm,
-        paddingVertical: spacing.md,
-        borderRadius: radii.md,
-        backgroundColor: doctorColors.primary,
-    },
-    acceptBtnText: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
-        color: '#FFFFFF',
+        color: '#D97706',
     },
 
-    // Pagination
-    pagination: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingVertical: spacing.xl,
-        paddingHorizontal: spacing.md,
-    },
-    pageBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: spacing.xs,
-        paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.md,
-        borderRadius: radii.md,
-        borderWidth: 1,
-        borderColor: doctorColors.border,
-    },
-    pageBtnDisabled: {
-        borderColor: doctorColors.borderLight,
-        opacity: 0.5,
-    },
-    pageBtnText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.primary,
-    },
-    pageBtnTextDisabled: {
-        color: doctorColors.textMuted,
-    },
-    pageIndicator: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.textSecondary,
-    },
+// Pagination styles removed
 
     // Empty state
     emptyState: {
