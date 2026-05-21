@@ -31,6 +31,7 @@ import {
     Dimensions,
     Linking,
     Alert,
+    RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -219,6 +220,8 @@ export default function CaregiverDashboardScreen() {
     const [calMonth, setCalMonth] = useState(now.getMonth());
     const [calYear, setCalYear] = useState(now.getFullYear());
 
+    const [refreshing, setRefreshing] = useState(false);
+
     // -- Fetch data from API --
     const fetchAll = useCallback(async () => {
         if (!token) return;
@@ -246,8 +249,14 @@ export default function CaregiverDashboardScreen() {
             console.error('Caregiver dashboard fetch error:', e);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
-    }, [token]);
+    }, [token, user?.hospitalId]);
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        fetchAll();
+    }, [fetchAll]);
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -273,6 +282,14 @@ export default function CaregiverDashboardScreen() {
     const upcomingAppointment = appointments.find(
         (a) => a.status === 'CONFIRMED' || a.status === 'IN_PROGRESS',
     ) ?? null;
+
+    const isProcessingSummary = useMemo(() => {
+        if (!upcomingAppointment) return false;
+        if (upcomingAppointment.status !== 'IN_PROGRESS') return false;
+        const endTimeMs = new Date(upcomingAppointment.scheduled_time).getTime() + ((upcomingAppointment.duration_minutes || 30) * 60 * 1000);
+        return Date.now() > endTimeMs;
+    }, [upcomingAppointment]);
+
     const hasNotifications = records.length > 0;
 
     const specialties = useMemo(
@@ -651,7 +668,13 @@ export default function CaregiverDashboardScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+                contentContainerStyle={styles.scrollContent} 
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={patientColors.primary} />
+                }
+            >
                 {/* ── 1. Header ── */}
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
@@ -695,34 +718,44 @@ export default function CaregiverDashboardScreen() {
                             </View>
                         </View>
                         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                            <Pressable
-                                style={({ pressed }) => [styles.nextUpShareBtn, pressed && { opacity: 0.7 }]}
-                                onPress={async () => {
-                                    if (!token || !upcomingAppointment) return;
-                                    const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://careconnect.app';
-                                    try {
-                                        const res = await getJoinToken(token, upcomingAppointment.id);
-                                        if (!res.patient_join_token) {
-                                            Alert.alert('Not ready', 'The doctor needs to start the call first.');
-                                            return;
-                                        }
-                                        const joinUrl = `${WEB_URL}/join/${upcomingAppointment.id}?token=${encodeURIComponent(res.patient_join_token)}`;
-                                        const msg = `Hi! Your CareConnect video consultation is ready.\n\nJoin here: ${joinUrl}`;
-                                        await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(msg)}`);
-                                    } catch (err: any) {
-                                        Alert.alert('Share failed', err.message);
-                                    }
-                                }}
-                            >
-                                <Feather name="share-2" size={18} color={patientColors.primary} />
-                            </Pressable>
-                            <SmartJoinButton
-                                scheduledTime={upcomingAppointment.scheduled_time}
-                                durationMinutes={upcomingAppointment.duration_minutes || 30}
-                                role="caregiver"
-                                onPress={() => router.push(`/(caregiver)/consultation/${upcomingAppointment.id}` as any)}
-                                style={{ flex: 1 }}
-                            />
+                            {isProcessingSummary ? (
+                                <View style={[styles.nextUpJoinBtn, { backgroundColor: patientColors.primaryLight, flex: 1 }]}>
+                                    <ActivityIndicator size="small" color={patientColors.primary} style={{ marginRight: spacing.sm }} />
+                                    <Text style={[styles.nextUpJoinText, { color: patientColors.primaryDark }]}>Processing Summary...</Text>
+                                </View>
+                            ) : (
+                                <>
+                                    <Pressable
+                                        style={({ pressed }) => [styles.nextUpShareBtn, pressed && { opacity: 0.7 }]}
+                                        onPress={async () => {
+                                            if (!token || !upcomingAppointment) return;
+                                            const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://careconnect.app';
+                                            try {
+                                                const res = await getJoinToken(token, upcomingAppointment.id);
+                                                if (!res.patient_join_token) {
+                                                    Alert.alert('Not ready', 'The doctor needs to start the call first.');
+                                                    return;
+                                                }
+                                                const joinUrl = `${WEB_URL}/join/${upcomingAppointment.id}?token=${encodeURIComponent(res.patient_join_token)}`;
+                                                const msg = `Hi! Your CareConnect video consultation is ready.\n\nJoin here: ${joinUrl}`;
+                                                await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(msg)}`);
+                                            } catch (err: any) {
+                                                Alert.alert('Share failed', err.message);
+                                            }
+                                        }}
+                                    >
+                                        <Feather name="share-2" size={18} color={patientColors.primary} />
+                                    </Pressable>
+                                    <SmartJoinButton
+                                        scheduledTime={upcomingAppointment.scheduled_time}
+                                        durationMinutes={upcomingAppointment.duration_minutes || 30}
+                                        appointmentStatus={upcomingAppointment.status}
+                                        role="caregiver"
+                                        onPress={() => router.push(`/(caregiver)/consultation/${upcomingAppointment.id}` as any)}
+                                        style={{ flex: 1 }}
+                                    />
+                                </>
+                            )}
                         </View>
                     </View>
                 )}
@@ -801,6 +834,34 @@ export default function CaregiverDashboardScreen() {
                         <Feather name="chevron-right" size={18} color={patientColors.textMuted} />
                     </Pressable>
                 ))}
+
+                {/* ── 7. Past Consultations ── */}
+                <View style={[styles.sectionHeader, { marginTop: spacing.xl }]}>
+                    <Text style={styles.sectionTitle}>Past Consultations</Text>
+                </View>
+                {appointments.filter(a => a.status === 'COMPLETED').slice(0, 5).map((appt) => (
+                    <Pressable
+                        key={appt.id}
+                        style={({ pressed }) => [styles.recordCard, pressed && { opacity: 0.85 }]}
+                        onPress={() => router.push({ pathname: '/(caregiver)/post-call-summary', params: { appointmentId: appt.id } } as any)}
+                    >
+                        <View style={styles.recordContent}>
+                            <Text style={styles.recordDiagnosis}>
+                                Dr. {doctors.find(d => d.id === appt.doctor_id)?.full_name ?? 'Unknown'}
+                            </Text>
+                            <Text style={styles.recordMeta}>
+                                {new Date(appt.scheduled_time).toLocaleDateString()} • Video Consultation
+                            </Text>
+                        </View>
+                        <Feather name="chevron-right" size={18} color={patientColors.textMuted} />
+                    </Pressable>
+                ))}
+                {appointments.filter(a => a.status === 'COMPLETED').length === 0 && (
+                    <Text style={{ textAlign: 'center', color: patientColors.textMuted, marginTop: spacing.sm }}>
+                        No past consultations yet.
+                    </Text>
+                )}
+
                 <View style={{ height: spacing['3xl'] }} />
             </ScrollView>
 
@@ -990,6 +1051,8 @@ const styles = StyleSheet.create({
     nextUpSpec: { fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: patientColors.textSecondary },
     nextUpTimeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginLeft: 44 + spacing.md },
     nextUpTime: { fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: patientColors.textMuted },
+    nextUpJoinBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, paddingVertical: spacing.md },
+    nextUpJoinText: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base },
     nextUpShareBtn: { width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, borderWidth: 1, borderColor: patientColors.border, backgroundColor: patientColors.surface },
     joinCallButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: patientColors.primary, paddingVertical: spacing.md, borderRadius: radii.md },
     joinCallText: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: '#FFFFFF' },

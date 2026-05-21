@@ -1,17 +1,18 @@
 /**
  * CareConnect — Post-Call Summary
  *
- * Shown immediately after hanging up a video consultation.
- * Vertical mobile layout:
- *   1. Success banner (check circle + "Consultation Complete")
- *   2. Rate Your Experience card (interactive 5-star + feedback textarea)
- *   3. Medical Record Details card (diagnosis, symptoms, Rx, follow-up)
- *   4. Sticky bottom actions (Submit / Skip)
+ * Shown after hanging up a video consultation.
+ * Fetches the AI-generated summary from the API.
+ *
+ * States:
+ *   - Loading: spinner while checking for summary
+ *   - Not Ready: "Your summary will be ready shortly" + Return to Dashboard
+ *   - Ready: full summary card with bilingual toggle, ratings, download stub
  *
  * Uses patientColors tokens + StyleSheet.create(). No Nativewind.
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -19,10 +20,11 @@ import {
     ScrollView,
     TextInput,
     StyleSheet,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
     patientColors,
     spacing,
@@ -30,20 +32,118 @@ import {
     radii,
     shadows,
 } from '@/constants/theme';
-import { mockPostCallSummary } from '@/services/mock-data';
+import { useAuth } from '@/hooks/useAuth';
+import { getPostCallSummary, type PostCallSummary } from '@/services/caregiver';
 
 const STAR_COLOR = '#F59E0B';    // amber/gold
 const STAR_GRAY = '#D1D5DB';
 
 export default function PostCallSummaryScreen() {
     const router = useRouter();
+    const { appointmentId } = useLocalSearchParams<{ appointmentId: string }>();
+    const { token } = useAuth();
+
+    const [loading, setLoading] = useState(true);
+    const [summary, setSummary] = useState<PostCallSummary | null>(null);
+    const [error, setError] = useState<string | null>(null);
     const [rating, setRating] = useState(0);
     const [feedback, setFeedback] = useState('');
-    const data = mockPostCallSummary;
+
+    // ── Bilingual toggle ──
+    const [showLocal, setShowLocal] = useState(false);
+
+    // ── Fetch the summary from the API ──
+    const fetchSummary = useCallback(async () => {
+        if (!token || !appointmentId) return;
+        setLoading(true);
+        setError(null);
+        try {
+            const data = await getPostCallSummary(token, appointmentId);
+            setSummary(data);
+        } catch (e: any) {
+            console.error('Failed to fetch summary:', e);
+            setError(e?.message || 'Something went wrong');
+        } finally {
+            setLoading(false);
+        }
+    }, [token, appointmentId]);
+
+    useEffect(() => {
+        fetchSummary();
+    }, [fetchSummary]);
+
+    // ── Parse the bilingual summary JSON ──
+    const bilingualData = (() => {
+        if (!summary?.summary) return null;
+        try {
+            return JSON.parse(summary.summary);
+        } catch {
+            return null;
+        }
+    })();
+
+    // Helper: extract English or local-language value from bilingual fields
+    const getBilingualField = (fieldPath: string, fallback: string | null) => {
+        if (!bilingualData) return fallback;
+        const field = fieldPath.split('.').reduce((obj: any, key) => obj?.[key], bilingualData);
+        if (!field) return fallback;
+        if (typeof field === 'string') return field;
+        return showLocal ? (field.local_language || field.english || fallback) : (field.english || fallback);
+    };
+
+    const getBilingualArray = (fieldPath: string, fallback: string[] | null) => {
+        if (!bilingualData) return fallback;
+        const field = fieldPath.split('.').reduce((obj: any, key) => obj?.[key], bilingualData);
+        if (!field) return fallback;
+        if (Array.isArray(field)) return field;
+        return showLocal ? (field.local_language || field.english || fallback) : (field.english || fallback);
+    };
 
     const goHome = () => {
         router.replace('/(caregiver)' as any);
     };
+
+    // ── Loading State ──
+    if (loading) {
+        return (
+            <SafeAreaView style={[styles.container, styles.centered]}>
+                <ActivityIndicator size="large" color={patientColors.primary} />
+                <Text style={styles.loadingText}>Checking for your summary…</Text>
+            </SafeAreaView>
+        );
+    }
+
+    // ── Summary Not Ready Yet ──
+    if (!summary) {
+        return (
+            <SafeAreaView style={[styles.container, styles.centered]}>
+                <View style={styles.pendingCircle}>
+                    <Feather name="clock" size={40} color={patientColors.primary} />
+                </View>
+                <Text style={styles.pendingTitle}>Your AI summary will be ready shortly</Text>
+                <Text style={styles.pendingSubtitle}>
+                    Our AI is analyzing the consultation recording.{'\n'}
+                    You'll be able to view it from your dashboard.
+                </Text>
+                {error && <Text style={styles.errorText}>{error}</Text>}
+                <Pressable
+                    style={({ pressed }) => [styles.returnBtn, pressed && { opacity: 0.85 }]}
+                    onPress={goHome}
+                >
+                    <Feather name="home" size={18} color="#FFFFFF" />
+                    <Text style={styles.returnBtnText}>Return to Dashboard</Text>
+                </Pressable>
+            </SafeAreaView>
+        );
+    }
+
+    // ── Resolved field values (bilingual or fallback to English DB fields) ──
+    const diagnosis = getBilingualField('diagnosis', summary.diagnosis);
+    const treatmentPlan = getBilingualField('treatment_plan', summary.treatment_plan);
+    const followUp = getBilingualField('next_steps', summary.follow_up);
+    const symptoms = getBilingualArray('symptoms', summary.symptoms);
+    const prescriptions = summary.prescriptions;
+    const doctorNotes = summary.doctor_notes;
 
     return (
         <SafeAreaView style={styles.container}>
@@ -57,8 +157,26 @@ export default function PostCallSummaryScreen() {
                         <Feather name="check" size={36} color="#FFFFFF" />
                     </View>
                     <Text style={styles.bannerTitle}>Consultation Complete</Text>
-                    <Text style={styles.bannerSubtitle}>with {data.doctorName}</Text>
+                    <Text style={styles.bannerSubtitle}>AI-powered summary generated</Text>
                 </View>
+
+                {/* ── Bilingual Toggle ── */}
+                {bilingualData && (
+                    <View style={styles.toggleRow}>
+                        <Pressable
+                            style={[styles.toggleBtn, !showLocal && styles.toggleBtnActive]}
+                            onPress={() => setShowLocal(false)}
+                        >
+                            <Text style={[styles.toggleBtnText, !showLocal && styles.toggleBtnTextActive]}>English</Text>
+                        </Pressable>
+                        <Pressable
+                            style={[styles.toggleBtn, showLocal && styles.toggleBtnActive]}
+                            onPress={() => setShowLocal(true)}
+                        >
+                            <Text style={[styles.toggleBtnText, showLocal && styles.toggleBtnTextActive]}>हिंदी</Text>
+                        </Pressable>
+                    </View>
+                )}
 
                 {/* ── 2. Rate Your Experience ── */}
                 <View style={styles.card}>
@@ -92,68 +210,80 @@ export default function PostCallSummaryScreen() {
                     <Text style={styles.cardTitle}>Consultation Summary</Text>
 
                     {/* Diagnosis */}
-                    <View style={styles.detailSection}>
-                        <View style={styles.detailHeader}>
-                            <Feather name="activity" size={16} color={patientColors.primary} />
-                            <Text style={styles.detailLabel}>Diagnosis</Text>
+                    {diagnosis && (
+                        <View style={styles.detailSection}>
+                            <View style={styles.detailHeader}>
+                                <Feather name="activity" size={16} color={patientColors.primary} />
+                                <Text style={styles.detailLabel}>Diagnosis</Text>
+                            </View>
+                            <Text style={styles.detailValue}>{diagnosis}</Text>
                         </View>
-                        <Text style={styles.detailValue}>{data.diagnosis}</Text>
-                    </View>
+                    )}
 
                     {/* Symptoms */}
-                    <View style={styles.detailSection}>
-                        <View style={styles.detailHeader}>
-                            <Feather name="list" size={16} color={patientColors.primary} />
-                            <Text style={styles.detailLabel}>Symptoms</Text>
-                        </View>
-                        {data.symptoms.map((s, i) => (
-                            <View key={i} style={styles.bulletRow}>
-                                <View style={styles.bullet} />
-                                <Text style={styles.bulletText}>{s}</Text>
+                    {symptoms && symptoms.length > 0 && (
+                        <View style={styles.detailSection}>
+                            <View style={styles.detailHeader}>
+                                <Feather name="list" size={16} color={patientColors.primary} />
+                                <Text style={styles.detailLabel}>Symptoms</Text>
                             </View>
-                        ))}
-                    </View>
+                            {symptoms.map((s: string, i: number) => (
+                                <View key={i} style={styles.bulletRow}>
+                                    <View style={styles.bullet} />
+                                    <Text style={styles.bulletText}>{s}</Text>
+                                </View>
+                            ))}
+                        </View>
+                    )}
 
                     {/* Treatment Plan */}
-                    <View style={styles.detailSection}>
-                        <View style={styles.detailHeader}>
-                            <Feather name="clipboard" size={16} color={patientColors.primary} />
-                            <Text style={styles.detailLabel}>Treatment Plan</Text>
+                    {treatmentPlan && (
+                        <View style={styles.detailSection}>
+                            <View style={styles.detailHeader}>
+                                <Feather name="clipboard" size={16} color={patientColors.primary} />
+                                <Text style={styles.detailLabel}>Treatment Plan</Text>
+                            </View>
+                            <Text style={styles.detailValue}>{treatmentPlan}</Text>
                         </View>
-                        <Text style={styles.detailValue}>{data.treatmentPlan}</Text>
-                    </View>
+                    )}
 
                     {/* Prescriptions */}
-                    <View style={styles.detailSection}>
-                        <View style={styles.detailHeader}>
-                            <Feather name="package" size={16} color={patientColors.primary} />
-                            <Text style={styles.detailLabel}>Prescriptions</Text>
-                        </View>
-                        {data.prescriptions.map((p, i) => (
-                            <View key={i} style={styles.bulletRow}>
-                                <View style={styles.bullet} />
-                                <Text style={styles.bulletText}>{p}</Text>
+                    {prescriptions && prescriptions.length > 0 && (
+                        <View style={styles.detailSection}>
+                            <View style={styles.detailHeader}>
+                                <Feather name="package" size={16} color={patientColors.primary} />
+                                <Text style={styles.detailLabel}>Prescriptions</Text>
                             </View>
-                        ))}
-                    </View>
+                            {prescriptions.map((p: string, i: number) => (
+                                <View key={i} style={styles.bulletRow}>
+                                    <View style={styles.bullet} />
+                                    <Text style={styles.bulletText}>{p}</Text>
+                                </View>
+                            ))}
+                        </View>
+                    )}
 
                     {/* Follow-Up */}
-                    <View style={styles.followUpBox}>
-                        <View style={styles.detailHeader}>
-                            <Feather name="calendar" size={16} color={patientColors.primary} />
-                            <Text style={styles.detailLabel}>Follow-Up</Text>
+                    {followUp && (
+                        <View style={styles.followUpBox}>
+                            <View style={styles.detailHeader}>
+                                <Feather name="calendar" size={16} color={patientColors.primary} />
+                                <Text style={styles.detailLabel}>Follow-Up</Text>
+                            </View>
+                            <Text style={styles.followUpValue}>{followUp}</Text>
                         </View>
-                        <Text style={styles.followUpValue}>{data.followUp}</Text>
-                    </View>
+                    )}
 
                     {/* Doctor's Notes */}
-                    <View style={styles.detailSection}>
-                        <View style={styles.detailHeader}>
-                            <Feather name="file-text" size={16} color={patientColors.primary} />
-                            <Text style={styles.detailLabel}>Doctor's Notes</Text>
+                    {doctorNotes && (
+                        <View style={styles.detailSection}>
+                            <View style={styles.detailHeader}>
+                                <Feather name="file-text" size={16} color={patientColors.primary} />
+                                <Text style={styles.detailLabel}>Doctor's Notes</Text>
+                            </View>
+                            <Text style={styles.detailValue}>{doctorNotes}</Text>
                         </View>
-                        <Text style={styles.detailValue}>{data.doctorNotes}</Text>
-                    </View>
+                    )}
 
                     {/* Download PDF */}
                     <Pressable
@@ -203,9 +333,68 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: patientColors.background,
     },
+    centered: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: spacing.xl,
+    },
     scrollContent: {
         paddingHorizontal: spacing.lg,
         paddingTop: spacing.xl,
+    },
+
+    // ── Loading ──
+    loadingText: {
+        fontFamily: typography.fontFamily.medium,
+        ...typography.size.base,
+        color: patientColors.textSecondary,
+        marginTop: spacing.lg,
+    },
+
+    // ── Pending (not ready) ──
+    pendingCircle: {
+        width: 88,
+        height: 88,
+        borderRadius: 44,
+        backgroundColor: patientColors.primaryLight,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: spacing.xl,
+    },
+    pendingTitle: {
+        fontFamily: typography.fontFamily.bold,
+        ...typography.size.xl,
+        color: patientColors.textPrimary,
+        marginBottom: spacing.md,
+        textAlign: 'center',
+    },
+    pendingSubtitle: {
+        fontFamily: typography.fontFamily.regular,
+        ...typography.size.base,
+        color: patientColors.textSecondary,
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: spacing.xl,
+    },
+    errorText: {
+        fontFamily: typography.fontFamily.regular,
+        ...typography.size.sm,
+        color: '#EF4444',
+        marginBottom: spacing.md,
+    },
+    returnBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        backgroundColor: patientColors.primary,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.xl,
+        borderRadius: radii.md,
+    },
+    returnBtnText: {
+        fontFamily: typography.fontFamily.semiBold,
+        ...typography.size.base,
+        color: '#FFFFFF',
     },
 
     // ── Banner ──
@@ -232,6 +421,32 @@ const styles = StyleSheet.create({
         fontFamily: typography.fontFamily.regular,
         ...typography.size.base,
         color: patientColors.textSecondary,
+    },
+
+    // ── Bilingual Toggle ──
+    toggleRow: {
+        flexDirection: 'row',
+        alignSelf: 'center',
+        backgroundColor: patientColors.surfaceMuted,
+        borderRadius: radii.md,
+        padding: 3,
+        marginBottom: spacing.lg,
+    },
+    toggleBtn: {
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.lg,
+        borderRadius: radii.sm,
+    },
+    toggleBtnActive: {
+        backgroundColor: patientColors.primary,
+    },
+    toggleBtnText: {
+        fontFamily: typography.fontFamily.medium,
+        ...typography.size.sm,
+        color: patientColors.textSecondary,
+    },
+    toggleBtnTextActive: {
+        color: '#FFFFFF',
     },
 
     // ── Card ──

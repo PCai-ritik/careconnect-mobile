@@ -37,6 +37,7 @@ import { getAppointments, getPatients, getDoctorProfile, startVideoSession, getJ
 import type { PatientProfile, Appointment, DoctorProfile } from '@/services/types';
 import PatientChartModal from '@/components/doctor/PatientChartModal';
 import NewPrescriptionModal from '@/components/doctor/NewPrescriptionModal';
+import LiveNotesModal from '@/components/doctor/LiveNotesModal';
 
 // LiveKit — conditional import for Expo Go compatibility
 import { LIVEKIT_AVAILABLE } from '@/services/livekit';
@@ -134,6 +135,7 @@ export default function DoctorConsultationScreen() {
     const [isCameraOn, setIsCameraOn] = useState(true);
     const [isChartOpen, setIsChartOpen] = useState(false);
     const [isPrescriptionOpen, setIsPrescriptionOpen] = useState(false);
+    const [isNotesOpen, setIsNotesOpen] = useState(false);
 
     // ── Patient-joined tracking (for COMPLETED status) ──
     const patientJoinedRef = useRef(false);
@@ -238,15 +240,6 @@ export default function DoctorConsultationScreen() {
     const handleEndCall = useCallback(async () => {
         if (timerRef.current) clearInterval(timerRef.current);
 
-        // Mark appointment as COMPLETED only if the patient actually joined
-        if (patientJoinedRef.current && token && id) {
-            try {
-                await updateAppointmentStatus(token, id, 'COMPLETED');
-            } catch (e) {
-                console.error('Failed to complete appointment:', e);
-            }
-        }
-
         await AudioSession.stopAudioSession();
         router.back();
     }, [router, token, id]);
@@ -325,6 +318,18 @@ export default function DoctorConsultationScreen() {
                     {/* Video */}
                     <CameraControl isCameraOn={isCameraOn} setIsCameraOn={setIsCameraOn} hasToken={!!joinToken} />
 
+                    {/* Live Notes */}
+                    <Pressable
+                        style={({ pressed }) => [
+                            styles.controlBtn,
+                            isNotesOpen && styles.controlBtnActive,
+                            pressed && { opacity: 0.7 },
+                        ]}
+                        onPress={() => setIsNotesOpen(true)}
+                    >
+                        <Feather name="file-text" size={20} color={VC.text} />
+                    </Pressable>
+
                     {/* Patient Chart */}
                     <Pressable
                         style={({ pressed }) => [
@@ -394,6 +399,11 @@ export default function DoctorConsultationScreen() {
                 patientId={patient?.id}
                 patientName={patientName}
                 patientGender={patient?.gender ?? ''}
+            />
+            <LiveNotesModal
+                visible={isNotesOpen}
+                onClose={() => setIsNotesOpen(false)}
+                appointmentId={id}
             />
         </View>
     );

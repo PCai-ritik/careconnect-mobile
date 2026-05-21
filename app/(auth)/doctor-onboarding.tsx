@@ -368,6 +368,7 @@ export default function DoctorOnboardingScreen() {
                 access_token: token,
                 token_type: 'bearer',
                 user_id: userData.user_id,
+                hospital_id: userData.hospital_id || 'unassigned',
                 role: userData.role,
             });
 

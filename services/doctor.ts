@@ -247,3 +247,18 @@ export async function getMe(
     });
 }
 
+// ─── Doctor Notes ───────────────────────────────────────────────────────────
+
+export async function createDoctorNote(
+    token: string,
+    appointmentId: string,
+    content: string,
+): Promise<import('./types').DoctorNote> {
+    return apiRequest<import('./types').DoctorNote>({
+        method: 'POST',
+        path: '/doctor-notes',
+        body: { appointment_id: appointmentId, content },
+        token,
+    });
+}
+

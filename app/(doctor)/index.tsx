@@ -137,6 +137,7 @@ function HeroCard({ appointment, onStartCall, onShare }: { appointment: DisplayA
                 <SmartJoinButton
                     scheduledTime={appointment.scheduled_time}
                     durationMinutes={appointment.duration_minutes || 30}
+                    appointmentStatus={appointment.status}
                     role="doctor"
                     onPress={onStartCall}
                     style={{ flex: 1 }}
@@ -191,6 +192,7 @@ function ScheduleRow({ appointment, onPress, onJoin, onShare }: { appointment: D
             <SmartJoinButton
                 scheduledTime={appointment.scheduled_time}
                 durationMinutes={appointment.duration_minutes || 30}
+                appointmentStatus={appointment.status}
                 role="doctor"
                 size="sm"
                 onPress={onJoin}

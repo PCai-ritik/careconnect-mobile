@@ -6,6 +6,7 @@ import { doctorColors, typography, radii, spacing, patientColors } from '@/const
 interface SmartJoinButtonProps {
     scheduledTime: string;
     durationMinutes: number;
+    appointmentStatus?: string;
     role: 'doctor' | 'caregiver';
     size?: 'sm' | 'md';
     onPress: () => void;
@@ -17,6 +18,7 @@ type ButtonState = 'future' | 'imminent' | 'in-progress' | 'overdue';
 export default function SmartJoinButton({
     scheduledTime,
     durationMinutes,
+    appointmentStatus,
     role,
     size = 'md',
     onPress,
@@ -27,6 +29,13 @@ export default function SmartJoinButton({
 
     useEffect(() => {
         const updateStatus = () => {
+            // If the backend says the call is already in progress
+            // (e.g. doctor started early), skip time-based logic.
+            if (appointmentStatus === 'IN_PROGRESS') {
+                setStatus('in-progress');
+                return;
+            }
+
             const now = new Date();
             const scheduled = new Date(scheduledTime);
             const endTime = new Date(scheduled.getTime() + durationMinutes * 60000);
@@ -58,7 +67,7 @@ export default function SmartJoinButton({
         const interval = setInterval(updateStatus, 60000); // update every minute
 
         return () => clearInterval(interval);
-    }, [scheduledTime, durationMinutes]);
+    }, [scheduledTime, durationMinutes, appointmentStatus]);
 
     const isCaregiver = role === 'caregiver';
     const primaryColor = isCaregiver ? patientColors.primary : doctorColors.primary;

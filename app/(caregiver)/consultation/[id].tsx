@@ -106,8 +106,6 @@ export default function ConsultationScreen() {
     // -- State --
     const [isMicOn, setIsMicOn] = useState(true);
     const [isCameraOn, setIsCameraOn] = useState(true);
-    const [isNotesOpen, setIsNotesOpen] = useState(false);
-    const [notes, setNotes] = useState('');
     const [elapsed, setElapsed] = useState(0);
     const [doctorName, setDoctorName] = useState('Doctor');
 
@@ -217,8 +215,11 @@ export default function ConsultationScreen() {
     const handleEndCall = useCallback(async () => {
         if (timerRef.current) clearInterval(timerRef.current);
         await AudioSession.stopAudioSession();
-        router.replace('/(caregiver)/post-call-summary');
-    }, [router]);
+        router.replace({
+            pathname: '/(caregiver)/post-call-summary',
+            params: { appointmentId: id },
+        } as any);
+    }, [router, id]);
 
     const getInitials = (name: string) =>
         name.split(' ').map((n) => n[0]).join('');
@@ -287,17 +288,6 @@ export default function ConsultationScreen() {
                     {/* Video */}
                     <CameraControl isCameraOn={isCameraOn} setIsCameraOn={setIsCameraOn} hasToken={!!joinTokenStr} />
 
-                    {/* Notes */}
-                    <Pressable
-                        style={({ pressed }) => [
-                            styles.controlBtn,
-                            isNotesOpen && styles.controlBtnActive,
-                            pressed && { opacity: 0.7 },
-                        ]}
-                        onPress={() => setIsNotesOpen(true)}
-                    >
-                        <Feather name="message-square" size={22} color={VC.text} />
-                    </Pressable>
 
                     {/* End Call */}
                     <Pressable
@@ -312,56 +302,7 @@ export default function ConsultationScreen() {
                 </View>
             </SafeAreaView>
 
-            {/* ── Live Notes Bottom Sheet ── */}
-            <Modal
-                animationType="slide"
-                transparent
-                visible={isNotesOpen}
-                onRequestClose={() => setIsNotesOpen(false)}
-            >
-                {/* Top half — tap to dismiss, still see video */}
-                <Pressable style={ns.topHalf} onPress={() => setIsNotesOpen(false)} />
 
-                {/* Bottom sheet */}
-                <View style={ns.sheet}>
-                    <View style={ns.handleBar} />
-
-                    {/* Header */}
-                    <View style={ns.header}>
-                        <Text style={ns.title}>Session Notes</Text>
-                        <Pressable
-                            onPress={() => setIsNotesOpen(false)}
-                            style={ns.closeBtn}
-                        >
-                            <Feather name="x" size={20} color={patientColors.textMuted} />
-                        </Pressable>
-                    </View>
-
-                    {/* Input */}
-                    <TextInput
-                        style={ns.input}
-                        multiline
-                        autoFocus
-                        placeholder="Type your notes here…"
-                        placeholderTextColor={patientColors.textMuted}
-                        value={notes}
-                        onChangeText={setNotes}
-                        textAlignVertical="top"
-                    />
-
-                    {/* Save */}
-                    <Pressable
-                        style={({ pressed }) => [ns.saveBtn, pressed && { opacity: 0.85 }]}
-                        onPress={() => {
-                            console.log('Notes saved:', notes);
-                            setIsNotesOpen(false);
-                        }}
-                    >
-                        <Feather name="save" size={18} color="#FFFFFF" />
-                        <Text style={ns.saveBtnText}>Save Notes</Text>
-                    </Pressable>
-                </View>
-            </Modal>
         </View>
     );
 

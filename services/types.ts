@@ -191,6 +191,13 @@ export interface MedicalRecord {
     created_at: string;
 }
 
+export interface DoctorNote {
+    id: string;
+    appointment_id: string;
+    content: string;
+    created_at: string;
+}
+
 // ─── Video Sessions ─────────────────────────────────────────────────────────
 
 /** Maps to backend schemas.VideoJoinResponse */
