@@ -6,8 +6,6 @@
  */
 
 import {
-    View,
-    Text,
     Modal,
     Pressable,
     StyleSheet,
@@ -20,6 +18,7 @@ import {
     shadows,
     radii,
 } from '@/constants/theme';
+import { ThemedView, ThemedText } from '@/components/shared/Themed';
 
 type AlertVariant = 'success' | 'warning' | 'danger';
 
@@ -65,23 +64,23 @@ export default function PatientThemedAlert({
             visible={visible}
             onRequestClose={onCancel ?? onConfirm}
         >
-            <View style={s.overlay}>
-                <View style={s.card}>
+            <ThemedView style={s.overlay}>
+                <ThemedView bg="surface" style={s.card}>
                     {/* Icon */}
-                    <View style={[s.iconCircle, { backgroundColor: v.bg }]}>
+                    <ThemedView style={[s.iconCircle, { backgroundColor: v.bg }]}>
                         <Feather
                             name={icon ?? defaultIcon}
                             size={28}
                             color={v.color}
                         />
-                    </View>
+                    </ThemedView>
 
                     {/* Text */}
-                    <Text style={s.title}>{title}</Text>
-                    <Text style={s.message}>{message}</Text>
+                    <ThemedText weight="bold" size="lg" style={s.title}>{title}</ThemedText>
+                    <ThemedText size="sm" color="muted" style={s.message}>{message}</ThemedText>
 
                     {/* Actions */}
-                    <View style={s.actions}>
+                    <ThemedView style={s.actions}>
                         {cancelLabel && onCancel && (
                             <Pressable
                                 style={({ pressed }) => [
@@ -91,7 +90,7 @@ export default function PatientThemedAlert({
                                 ]}
                                 onPress={onCancel}
                             >
-                                <Text style={s.cancelBtnText}>{cancelLabel}</Text>
+                                <ThemedText weight="medium" color="secondary" style={s.cancelBtnText}>{cancelLabel}</ThemedText>
                             </Pressable>
                         )}
                         <Pressable
@@ -104,11 +103,11 @@ export default function PatientThemedAlert({
                             ]}
                             onPress={onConfirm}
                         >
-                            <Text style={s.confirmBtnText}>{confirmLabel}</Text>
+                            <ThemedText weight="semiBold" style={s.confirmBtnText}>{confirmLabel}</ThemedText>
                         </Pressable>
-                    </View>
-                </View>
-            </View>
+                    </ThemedView>
+                </ThemedView>
+            </ThemedView>
         </Modal>
     );
 }
@@ -123,7 +122,6 @@ const s = StyleSheet.create({
     },
     card: {
         width: '100%',
-        backgroundColor: patientColors.surface,
         borderRadius: radii.xl,
         padding: spacing.xl,
         alignItems: 'center',
@@ -138,16 +136,10 @@ const s = StyleSheet.create({
         marginBottom: spacing.lg,
     },
     title: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size.lg,
-        color: patientColors.textPrimary,
         textAlign: 'center',
         marginBottom: spacing.sm,
     },
     message: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: patientColors.textMuted,
         textAlign: 'center',
         lineHeight: 20,
         marginBottom: spacing.xl,
@@ -170,14 +162,9 @@ const s = StyleSheet.create({
         backgroundColor: patientColors.surface,
     },
     cancelBtnText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.base,
-        color: patientColors.textSecondary,
     },
     confirmBtn: {},
     confirmBtnText: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
         color: '#FFFFFF',
     },
 });

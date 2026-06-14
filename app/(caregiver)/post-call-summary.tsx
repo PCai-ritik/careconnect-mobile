@@ -14,8 +14,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-    View,
-    Text,
     Pressable,
     ScrollView,
     TextInput,
@@ -26,12 +24,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
-    patientColors,
     spacing,
     typography,
     radii,
     shadows,
 } from '@/constants/theme';
+import { useTheme } from '@/providers/ThemeProvider';
+import { ThemedView, ThemedText } from '@/components/shared/Themed';
 import { useAuth } from '@/hooks/useAuth';
 import { getPostCallSummary, type PostCallSummary } from '@/services/caregiver';
 
@@ -42,6 +41,8 @@ export default function PostCallSummaryScreen() {
     const router = useRouter();
     const { appointmentId } = useLocalSearchParams<{ appointmentId: string }>();
     const { token } = useAuth();
+    const { colors } = useTheme();
+    const styles = useStyles(colors);
 
     const [loading, setLoading] = useState(true);
     const [summary, setSummary] = useState<PostCallSummary | null>(null);
@@ -107,8 +108,8 @@ export default function PostCallSummaryScreen() {
     if (loading) {
         return (
             <SafeAreaView style={[styles.container, styles.centered]}>
-                <ActivityIndicator size="large" color={patientColors.primary} />
-                <Text style={styles.loadingText}>Checking for your summary…</Text>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <ThemedText weight="medium" color="secondary" style={styles.loadingText}>Checking for your summary…</ThemedText>
             </SafeAreaView>
         );
     }
@@ -117,21 +118,21 @@ export default function PostCallSummaryScreen() {
     if (!summary) {
         return (
             <SafeAreaView style={[styles.container, styles.centered]}>
-                <View style={styles.pendingCircle}>
-                    <Feather name="clock" size={40} color={patientColors.primary} />
-                </View>
-                <Text style={styles.pendingTitle}>Your AI summary will be ready shortly</Text>
-                <Text style={styles.pendingSubtitle}>
+                <ThemedView style={styles.pendingCircle}>
+                    <Feather name="clock" size={40} color={colors.primary} />
+                </ThemedView>
+                <ThemedText weight="bold" size="xl" style={styles.pendingTitle}>Your AI summary will be ready shortly</ThemedText>
+                <ThemedText color="secondary" style={styles.pendingSubtitle}>
                     Our AI is analyzing the consultation recording.{'\n'}
                     You'll be able to view it from your dashboard.
-                </Text>
-                {error && <Text style={styles.errorText}>{error}</Text>}
+                </ThemedText>
+                {error && <ThemedText size="sm" style={styles.errorText}>{error}</ThemedText>}
                 <Pressable
                     style={({ pressed }) => [styles.returnBtn, pressed && { opacity: 0.85 }]}
                     onPress={goHome}
                 >
                     <Feather name="home" size={18} color="#FFFFFF" />
-                    <Text style={styles.returnBtnText}>Return to Dashboard</Text>
+                    <ThemedText weight="semiBold" style={styles.returnBtnText}>Return to Dashboard</ThemedText>
                 </Pressable>
             </SafeAreaView>
         );
@@ -152,37 +153,37 @@ export default function PostCallSummaryScreen() {
                 showsVerticalScrollIndicator={false}
             >
                 {/* ── 1. Success Banner ── */}
-                <View style={styles.banner}>
-                    <View style={styles.checkCircle}>
+                <ThemedView style={styles.banner}>
+                    <ThemedView style={styles.checkCircle}>
                         <Feather name="check" size={36} color="#FFFFFF" />
-                    </View>
-                    <Text style={styles.bannerTitle}>Consultation Complete</Text>
-                    <Text style={styles.bannerSubtitle}>AI-powered summary generated</Text>
-                </View>
+                    </ThemedView>
+                    <ThemedText weight="bold" size="xl" style={styles.bannerTitle}>Consultation Complete</ThemedText>
+                    <ThemedText color="secondary" style={styles.bannerSubtitle}>AI-powered summary generated</ThemedText>
+                </ThemedView>
 
                 {/* ── Bilingual Toggle ── */}
                 {bilingualData && (
-                    <View style={styles.toggleRow}>
+                    <ThemedView style={styles.toggleRow}>
                         <Pressable
                             style={[styles.toggleBtn, !showLocal && styles.toggleBtnActive]}
                             onPress={() => setShowLocal(false)}
                         >
-                            <Text style={[styles.toggleBtnText, !showLocal && styles.toggleBtnTextActive]}>English</Text>
+                            <ThemedText weight="medium" size="sm" color="secondary" style={[styles.toggleBtnText, !showLocal && styles.toggleBtnTextActive]}>English</ThemedText>
                         </Pressable>
                         <Pressable
                             style={[styles.toggleBtn, showLocal && styles.toggleBtnActive]}
                             onPress={() => setShowLocal(true)}
                         >
-                            <Text style={[styles.toggleBtnText, showLocal && styles.toggleBtnTextActive]}>हिंदी</Text>
+                            <ThemedText weight="medium" size="sm" color="secondary" style={[styles.toggleBtnText, showLocal && styles.toggleBtnTextActive]}>हिंदी</ThemedText>
                         </Pressable>
-                    </View>
+                    </ThemedView>
                 )}
 
                 {/* ── 2. Rate Your Experience ── */}
-                <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Rate your experience</Text>
+                <ThemedView style={styles.card}>
+                    <ThemedText weight="semiBold" size="lg" style={styles.cardTitle}>Rate your experience</ThemedText>
 
-                    <View style={styles.starsRow}>
+                    <ThemedView style={styles.starsRow}>
                         {[1, 2, 3, 4, 5].map((i) => (
                             <Pressable key={i} onPress={() => setRating(i)} style={styles.starBtn}>
                                 <Feather
@@ -192,97 +193,97 @@ export default function PostCallSummaryScreen() {
                                 />
                             </Pressable>
                         ))}
-                    </View>
+                    </ThemedView>
 
                     <TextInput
                         style={styles.feedbackInput}
                         multiline
                         placeholder="Share your feedback (optional)…"
-                        placeholderTextColor={patientColors.textMuted}
+                        placeholderTextColor={colors.textMuted}
                         value={feedback}
                         onChangeText={setFeedback}
                         textAlignVertical="top"
                     />
-                </View>
+                </ThemedView>
 
                 {/* ── 3. Consultation Summary ── */}
-                <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Consultation Summary</Text>
+                <ThemedView style={styles.card}>
+                    <ThemedText weight="semiBold" size="lg" style={styles.cardTitle}>Consultation Summary</ThemedText>
 
                     {/* Diagnosis */}
                     {diagnosis && (
-                        <View style={styles.detailSection}>
-                            <View style={styles.detailHeader}>
-                                <Feather name="activity" size={16} color={patientColors.primary} />
-                                <Text style={styles.detailLabel}>Diagnosis</Text>
-                            </View>
-                            <Text style={styles.detailValue}>{diagnosis}</Text>
-                        </View>
+                        <ThemedView style={styles.detailSection}>
+                            <ThemedView style={styles.detailHeader}>
+                                <Feather name="activity" size={16} color={colors.primary} />
+                                <ThemedText weight="semiBold" size="sm" color="secondary" style={styles.detailLabel}>Diagnosis</ThemedText>
+                            </ThemedView>
+                            <ThemedText size="base" style={styles.detailValue}>{diagnosis}</ThemedText>
+                        </ThemedView>
                     )}
 
                     {/* Symptoms */}
                     {symptoms && symptoms.length > 0 && (
-                        <View style={styles.detailSection}>
-                            <View style={styles.detailHeader}>
-                                <Feather name="list" size={16} color={patientColors.primary} />
-                                <Text style={styles.detailLabel}>Symptoms</Text>
-                            </View>
+                        <ThemedView style={styles.detailSection}>
+                            <ThemedView style={styles.detailHeader}>
+                                <Feather name="list" size={16} color={colors.primary} />
+                                <ThemedText weight="semiBold" size="sm" color="secondary" style={styles.detailLabel}>Symptoms</ThemedText>
+                            </ThemedView>
                             {symptoms.map((s: string, i: number) => (
-                                <View key={i} style={styles.bulletRow}>
-                                    <View style={styles.bullet} />
-                                    <Text style={styles.bulletText}>{s}</Text>
-                                </View>
+                                <ThemedView key={i} style={styles.bulletRow}>
+                                    <ThemedView style={styles.bullet} />
+                                    <ThemedText size="base" style={styles.bulletText}>{s}</ThemedText>
+                                </ThemedView>
                             ))}
-                        </View>
+                        </ThemedView>
                     )}
 
                     {/* Treatment Plan */}
                     {treatmentPlan && (
-                        <View style={styles.detailSection}>
-                            <View style={styles.detailHeader}>
-                                <Feather name="clipboard" size={16} color={patientColors.primary} />
-                                <Text style={styles.detailLabel}>Treatment Plan</Text>
-                            </View>
-                            <Text style={styles.detailValue}>{treatmentPlan}</Text>
-                        </View>
+                        <ThemedView style={styles.detailSection}>
+                            <ThemedView style={styles.detailHeader}>
+                                <Feather name="clipboard" size={16} color={colors.primary} />
+                                <ThemedText weight="semiBold" size="sm" color="secondary" style={styles.detailLabel}>Treatment Plan</ThemedText>
+                            </ThemedView>
+                            <ThemedText size="base" style={styles.detailValue}>{treatmentPlan}</ThemedText>
+                        </ThemedView>
                     )}
 
                     {/* Prescriptions */}
                     {prescriptions && prescriptions.length > 0 && (
-                        <View style={styles.detailSection}>
-                            <View style={styles.detailHeader}>
-                                <Feather name="package" size={16} color={patientColors.primary} />
-                                <Text style={styles.detailLabel}>Prescriptions</Text>
-                            </View>
+                        <ThemedView style={styles.detailSection}>
+                            <ThemedView style={styles.detailHeader}>
+                                <Feather name="package" size={16} color={colors.primary} />
+                                <ThemedText weight="semiBold" size="sm" color="secondary" style={styles.detailLabel}>Prescriptions</ThemedText>
+                            </ThemedView>
                             {prescriptions.map((p: string, i: number) => (
-                                <View key={i} style={styles.bulletRow}>
-                                    <View style={styles.bullet} />
-                                    <Text style={styles.bulletText}>{p}</Text>
-                                </View>
+                                <ThemedView key={i} style={styles.bulletRow}>
+                                    <ThemedView style={styles.bullet} />
+                                    <ThemedText size="base" style={styles.bulletText}>{p}</ThemedText>
+                                </ThemedView>
                             ))}
-                        </View>
+                        </ThemedView>
                     )}
 
                     {/* Follow-Up */}
                     {followUp && (
-                        <View style={styles.followUpBox}>
-                            <View style={styles.detailHeader}>
-                                <Feather name="calendar" size={16} color={patientColors.primary} />
-                                <Text style={styles.detailLabel}>Follow-Up</Text>
-                            </View>
-                            <Text style={styles.followUpValue}>{followUp}</Text>
-                        </View>
+                        <ThemedView style={styles.followUpBox}>
+                            <ThemedView style={styles.detailHeader}>
+                                <Feather name="calendar" size={16} color={colors.primary} />
+                                <ThemedText weight="semiBold" size="sm" color="secondary" style={styles.detailLabel}>Follow-Up</ThemedText>
+                            </ThemedView>
+                            <ThemedText weight="medium" size="base" style={styles.followUpValue}>{followUp}</ThemedText>
+                        </ThemedView>
                     )}
 
                     {/* Doctor's Notes */}
                     {doctorNotes && (
-                        <View style={styles.detailSection}>
-                            <View style={styles.detailHeader}>
-                                <Feather name="file-text" size={16} color={patientColors.primary} />
-                                <Text style={styles.detailLabel}>Doctor's Notes</Text>
-                            </View>
-                            <Text style={styles.detailValue}>{doctorNotes}</Text>
-                        </View>
+                        <ThemedView style={styles.detailSection}>
+                            <ThemedView style={styles.detailHeader}>
+                                <Feather name="file-text" size={16} color={colors.primary} />
+                                <ThemedText weight="semiBold" size="sm" color="secondary" style={styles.detailLabel}>Doctor's Notes</ThemedText>
+                            </ThemedView>
+                            <ThemedText size="base" style={styles.detailValue}>{doctorNotes}</ThemedText>
+                        </ThemedView>
                     )}
 
                     {/* Download PDF */}
@@ -290,17 +291,17 @@ export default function PostCallSummaryScreen() {
                         style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.8 }]}
                         onPress={() => console.log('Downloading...')}
                     >
-                        <Feather name="download" size={18} color={patientColors.primary} />
-                        <Text style={styles.downloadBtnText}>Download PDF</Text>
+                        <Feather name="download" size={18} color={colors.primary} />
+                        <ThemedText weight="semiBold" size="base" style={styles.downloadBtnText}>Download PDF</ThemedText>
                     </Pressable>
-                </View>
+                </ThemedView>
 
                 {/* Bottom spacer for sticky buttons */}
-                <View style={{ height: 100 }} />
+                <ThemedView style={{ height: 100 }} />
             </ScrollView>
 
             {/* ── 4. Sticky Bottom Actions ── */}
-            <View style={styles.bottomBar}>
+            <ThemedView style={styles.bottomBar}>
                 <Pressable
                     style={({ pressed }) => [
                         styles.submitBtn,
@@ -310,28 +311,28 @@ export default function PostCallSummaryScreen() {
                     disabled={rating === 0}
                     onPress={goHome}
                 >
-                    <Text style={[styles.submitBtnText, rating === 0 && styles.submitBtnTextDisabled]}>
+                    <ThemedText weight="semiBold" size="base" style={[styles.submitBtnText, rating === 0 && styles.submitBtnTextDisabled]}>
                         Submit & Return to Dashboard
-                    </Text>
+                    </ThemedText>
                 </Pressable>
 
                 <Pressable
                     style={({ pressed }) => [styles.skipBtn, pressed && { opacity: 0.7 }]}
                     onPress={goHome}
                 >
-                    <Text style={styles.skipBtnText}>Skip Feedback</Text>
+                    <ThemedText weight="medium" size="sm" color="muted" style={styles.skipBtnText}>Skip Feedback</ThemedText>
                 </Pressable>
-            </View>
+            </ThemedView>
         </SafeAreaView>
     );
 }
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const useStyles = (colors: any) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: patientColors.background,
+        backgroundColor: colors.background,
     },
     centered: {
         justifyContent: 'center',
@@ -345,9 +346,6 @@ const styles = StyleSheet.create({
 
     // ── Loading ──
     loadingText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.base,
-        color: patientColors.textSecondary,
         marginTop: spacing.lg,
     },
 
@@ -356,29 +354,21 @@ const styles = StyleSheet.create({
         width: 88,
         height: 88,
         borderRadius: 44,
-        backgroundColor: patientColors.primaryLight,
+        backgroundColor: colors.primaryLight,
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: spacing.xl,
     },
     pendingTitle: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size.xl,
-        color: patientColors.textPrimary,
         marginBottom: spacing.md,
         textAlign: 'center',
     },
     pendingSubtitle: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.base,
-        color: patientColors.textSecondary,
         textAlign: 'center',
         lineHeight: 22,
         marginBottom: spacing.xl,
     },
     errorText: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
         color: '#EF4444',
         marginBottom: spacing.md,
     },
@@ -386,14 +376,12 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.sm,
-        backgroundColor: patientColors.primary,
+        backgroundColor: colors.primary,
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.xl,
         borderRadius: radii.md,
     },
     returnBtnText: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
         color: '#FFFFFF',
     },
 
@@ -412,22 +400,16 @@ const styles = StyleSheet.create({
         marginBottom: spacing.lg,
     },
     bannerTitle: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size.xl,
-        color: patientColors.textPrimary,
         marginBottom: spacing.xs,
     },
     bannerSubtitle: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.base,
-        color: patientColors.textSecondary,
     },
 
     // ── Bilingual Toggle ──
     toggleRow: {
         flexDirection: 'row',
         alignSelf: 'center',
-        backgroundColor: patientColors.surfaceMuted,
+        backgroundColor: colors.surfaceMuted,
         borderRadius: radii.md,
         padding: 3,
         marginBottom: spacing.lg,
@@ -438,12 +420,9 @@ const styles = StyleSheet.create({
         borderRadius: radii.sm,
     },
     toggleBtnActive: {
-        backgroundColor: patientColors.primary,
+        backgroundColor: colors.primary,
     },
     toggleBtnText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: patientColors.textSecondary,
     },
     toggleBtnTextActive: {
         color: '#FFFFFF',
@@ -451,18 +430,15 @@ const styles = StyleSheet.create({
 
     // ── Card ──
     card: {
-        backgroundColor: patientColors.surface,
+        backgroundColor: colors.surface,
         borderRadius: radii.lg,
         padding: spacing.xl,
         marginBottom: spacing.lg,
         borderWidth: 1,
-        borderColor: patientColors.borderLight,
+        borderColor: colors.borderLight,
         ...shadows.elevated,
     },
     cardTitle: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.lg,
-        color: patientColors.textPrimary,
         marginBottom: spacing.lg,
     },
 
@@ -480,15 +456,15 @@ const styles = StyleSheet.create({
 
     // ── Feedback ──
     feedbackInput: {
-        backgroundColor: patientColors.surfaceMuted,
+        backgroundColor: colors.surfaceMuted,
         borderRadius: radii.md,
         padding: spacing.md,
         minHeight: 80,
         fontFamily: typography.fontFamily.regular,
         ...typography.size.sm,
-        color: patientColors.textPrimary,
+        color: colors.textPrimary,
         borderWidth: 1,
-        borderColor: patientColors.borderLight,
+        borderColor: colors.borderLight,
     },
 
     // ── Detail sections ──
@@ -502,16 +478,10 @@ const styles = StyleSheet.create({
         marginBottom: spacing.sm,
     },
     detailLabel: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
-        color: patientColors.textSecondary,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
     },
     detailValue: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.base,
-        color: patientColors.textPrimary,
         lineHeight: 22,
     },
 
@@ -527,28 +497,23 @@ const styles = StyleSheet.create({
         width: 6,
         height: 6,
         borderRadius: 3,
-        backgroundColor: patientColors.primary,
+        backgroundColor: colors.primary,
         marginTop: 8,
     },
     bulletText: {
         flex: 1,
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.base,
-        color: patientColors.textPrimary,
         lineHeight: 22,
     },
 
     // ── Follow-up (highlighted) ──
     followUpBox: {
-        backgroundColor: patientColors.primaryLight,
+        backgroundColor: colors.primaryLight,
         borderRadius: radii.md,
         padding: spacing.md,
         marginBottom: spacing.lg,
     },
     followUpValue: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.base,
-        color: patientColors.primaryDark,
+        color: colors.primaryDark,
         lineHeight: 22,
     },
 
@@ -561,14 +526,12 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.md,
         borderRadius: radii.md,
         borderWidth: 1.5,
-        borderColor: patientColors.primary,
+        borderColor: colors.primary,
         backgroundColor: 'transparent',
         marginTop: spacing.sm,
     },
     downloadBtnText: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
-        color: patientColors.primary,
+        color: colors.primary,
     },
 
     // ── Bottom bar ──
@@ -577,38 +540,33 @@ const styles = StyleSheet.create({
         bottom: 0,
         left: 0,
         right: 0,
-        backgroundColor: patientColors.surface,
+        backgroundColor: colors.surface,
         paddingHorizontal: spacing.lg,
         paddingTop: spacing.md,
         paddingBottom: spacing['2xl'],
         borderTopWidth: 1,
-        borderTopColor: patientColors.borderLight,
+        borderTopColor: colors.borderLight,
         gap: spacing.sm,
     },
     submitBtn: {
-        backgroundColor: patientColors.primary,
+        backgroundColor: colors.primary,
         paddingVertical: spacing.md,
         borderRadius: radii.md,
         alignItems: 'center',
     },
     submitBtnDisabled: {
-        backgroundColor: patientColors.border,
+        backgroundColor: colors.border,
     },
     submitBtnText: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
         color: '#FFFFFF',
     },
     submitBtnTextDisabled: {
-        color: patientColors.textMuted,
+        color: colors.textMuted,
     },
     skipBtn: {
         paddingVertical: spacing.sm,
         alignItems: 'center',
     },
     skipBtnText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: patientColors.textMuted,
     },
 });

@@ -8,7 +8,7 @@
 
 import Constants from 'expo-constants';
 
-const API_BASE_URL =
+export const API_BASE_URL =
     Constants.expoConfig?.extra?.apiUrl ??
     process.env.EXPO_PUBLIC_API_URL ??
     'https://api.careconnect.dev';

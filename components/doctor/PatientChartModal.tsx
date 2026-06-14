@@ -25,11 +25,11 @@ import useSwipeDown from '@/hooks/useSwipeDown';
 import { Feather } from '@expo/vector-icons';
 import {
     spacing,
-    doctorColors,
-    typography,
     shadows,
     radii,
 } from '@/constants/theme';
+import { useTheme } from '@/providers/ThemeProvider';
+import { ThemedText, ThemedView } from '@/components/shared/Themed';
 import { PatientProfile as RealPatientProfile, MedicalRecord } from '@/services/types';
 import { useAuth } from '@/hooks/useAuth';
 import { getPatientRecords } from '@/services/doctor';
@@ -98,23 +98,25 @@ const TAB_CONFIG: { id: TabId; label: string; icon: keyof typeof Feather.glyphMa
 // ─── Sub-Components ─────────────────────────────────────────────────────────
 
 function InfoRow({ icon, label, value }: { icon: keyof typeof Feather.glyphMap; label: string; value: string }) {
+    const { colors } = useTheme();
     return (
         <View style={s.infoRow}>
-            <Feather name={icon} size={16} color={doctorColors.textMuted} />
+            <Feather name={icon} size={16} color={colors.textMuted} />
             <View style={s.infoRowText}>
-                <Text style={s.infoLabel}>{label}</Text>
-                <Text style={s.infoValue}>{value}</Text>
+                <ThemedText color="muted" size="xs" style={s.infoLabel}>{label}</ThemedText>
+                <ThemedText color="primary" weight="semiBold" size="base" style={s.infoValue}>{value}</ThemedText>
             </View>
         </View>
     );
 }
 
 function Badge({ label, variant }: { label: string; variant: 'danger' | 'info' }) {
-    const bg = variant === 'danger' ? '#FEE2E2' : doctorColors.primaryLight;
-    const color = variant === 'danger' ? doctorColors.error : doctorColors.primary;
+    const { colors } = useTheme();
+    const bg = variant === 'danger' ? '#FEE2E2' : colors.primaryLight;
+    const color = variant === 'danger' ? '#EF4444' : colors.primary;
     return (
         <View style={[s.badge, { backgroundColor: bg }]}>
-            <Text style={[s.badgeText, { color }]}>{label}</Text>
+            <ThemedText weight="medium" size="sm" style={[s.badgeText, { color }]}>{label}</ThemedText>
         </View>
     );
 }
@@ -123,6 +125,7 @@ function Badge({ label, variant }: { label: string; variant: 'danger' | 'info' }
 
 function HistoryTab({ records }: { records: MedicalRecord[] }) {
     const [expandedId, setExpandedId] = useState<string | null>(null);
+    const { colors } = useTheme();
 
     const toggle = (id: string) => {
         setExpandedId((prev) => (prev === id ? null : id));
@@ -131,10 +134,10 @@ function HistoryTab({ records }: { records: MedicalRecord[] }) {
     if (records.length === 0) {
         return (
             <View style={s.historyContainer}>
-                <Text style={s.sectionLabel}>Past Consultations (0)</Text>
+                <ThemedText color="muted" weight="semiBold" size="sm" style={s.sectionLabel}>Past Consultations (0)</ThemedText>
                 <View style={{ alignItems: 'center', paddingVertical: spacing['3xl'] }}>
-                    <Feather name="file-text" size={32} color={doctorColors.textMuted} />
-                    <Text style={{ ...typography.size.sm, color: doctorColors.textMuted, marginTop: spacing.md }}>No consultation records yet</Text>
+                    <Feather name="file-text" size={32} color={colors.textMuted} />
+                    <ThemedText color="muted" size="sm" style={{ marginTop: spacing.md }}>No consultation records yet</ThemedText>
                 </View>
             </View>
         );
@@ -142,9 +145,9 @@ function HistoryTab({ records }: { records: MedicalRecord[] }) {
 
     return (
         <View style={s.historyContainer}>
-            <Text style={s.sectionLabel}>
+            <ThemedText color="muted" weight="semiBold" size="sm" style={s.sectionLabel}>
                 Past Consultations ({records.length})
-            </Text>
+            </ThemedText>
             {records.map((record) => {
                 const isOpen = expandedId === record.id;
                 const rxStrings = getPrescriptionStrings(record);
@@ -156,58 +159,59 @@ function HistoryTab({ records }: { records: MedicalRecord[] }) {
                             onPress={() => toggle(record.id)}
                             style={[
                                 s.consultationItem,
-                                isOpen && s.consultationItemActive,
+                                { borderColor: colors.borderLight },
+                                isOpen && [s.consultationItemActive, { borderColor: colors.primary, backgroundColor: colors.primaryLight }],
                             ]}
                         >
                             <View style={s.consultationItemLeft}>
-                                <Text style={s.consultationDiagnosis}>{record.diagnosis}</Text>
-                                <Text style={s.consultationDate}>{formatRecordDate(record.created_at)}</Text>
+                                <ThemedText color="primary" weight="semiBold" size="base" style={s.consultationDiagnosis}>{record.diagnosis}</ThemedText>
+                                <ThemedText color="muted" size="sm" style={s.consultationDate}>{formatRecordDate(record.created_at)}</ThemedText>
                             </View>
-                            <View style={s.rxBadge}>
-                                <Text style={s.rxBadgeText}>{record.prescriptions.length} Rx</Text>
+                            <View style={[s.rxBadge, { backgroundColor: colors.surfaceMuted }]}>
+                                <ThemedText color="secondary" weight="medium" size="xs" style={s.rxBadgeText}>{record.prescriptions.length} Rx</ThemedText>
                             </View>
                         </Pressable>
 
                         {/* Accordion Body (inline detail) */}
                         {isOpen && (
-                            <View style={s.detailPanel}>
+                            <View style={[s.detailPanel, { borderColor: colors.borderLight }]}>
                                 {/* Vitals */}
-                                <Text style={[s.detailSectionLabel, { marginTop: 0 }]}>Vitals</Text>
+                                <ThemedText color="muted" weight="medium" size="sm" style={[s.detailSectionLabel, { marginTop: 0 }]}>Vitals</ThemedText>
                                 <View style={s.vitalsGrid}>
                                     <View style={s.vitalItem}>
                                         <Feather name="heart" size={14} color="#EF4444" />
-                                        <Text style={s.vitalText}>BP: {vitals.bp}</Text>
+                                        <ThemedText color="primary" size="sm" style={s.vitalText}>BP: {vitals.bp}</ThemedText>
                                     </View>
                                     <View style={s.vitalItem}>
                                         <Feather name="activity" size={14} color="#EC4899" />
-                                        <Text style={s.vitalText}>Pulse: {vitals.pulse}</Text>
+                                        <ThemedText color="primary" size="sm" style={s.vitalText}>Pulse: {vitals.pulse}</ThemedText>
                                     </View>
                                     <View style={s.vitalItem}>
                                         <Feather name="thermometer" size={14} color="#F97316" />
-                                        <Text style={s.vitalText}>Temp: {vitals.temp}</Text>
+                                        <ThemedText color="primary" size="sm" style={s.vitalText}>Temp: {vitals.temp}</ThemedText>
                                     </View>
                                     <View style={s.vitalItem}>
                                         <Feather name="trending-up" size={14} color="#3B82F6" />
-                                        <Text style={s.vitalText}>Weight: {vitals.weight}</Text>
+                                        <ThemedText color="primary" size="sm" style={s.vitalText}>Weight: {vitals.weight}</ThemedText>
                                     </View>
                                 </View>
 
-                                <View style={s.separator} />
+                                <View style={[s.separator, { backgroundColor: colors.borderLight }]} />
 
                                 {/* Symptoms */}
-                                <Text style={[s.detailSectionLabel, { marginTop: 0 }]}>Symptoms</Text>
-                                <Text style={s.detailBody}>{record.symptoms ?? '—'}</Text>
+                                <ThemedText color="muted" weight="medium" size="sm" style={[s.detailSectionLabel, { marginTop: 0 }]}>Symptoms</ThemedText>
+                                <ThemedText color="primary" size="sm" style={s.detailBody}>{record.symptoms ?? '—'}</ThemedText>
 
                                 {/* Treatment */}
-                                <Text style={s.detailSectionLabel}>Treatment</Text>
-                                <Text style={s.detailBody}>{record.treatment ?? '—'}</Text>
+                                <ThemedText color="muted" weight="medium" size="sm" style={s.detailSectionLabel}>Treatment</ThemedText>
+                                <ThemedText color="primary" size="sm" style={s.detailBody}>{record.treatment ?? '—'}</ThemedText>
 
                                 {/* Prescriptions */}
-                                <Text style={s.detailSectionLabel}>Prescriptions</Text>
+                                <ThemedText color="muted" weight="medium" size="sm" style={s.detailSectionLabel}>Prescriptions</ThemedText>
                                 {rxStrings.map((rx, i) => (
                                     <View key={i} style={s.rxRow}>
-                                        <Feather name="package" size={13} color={doctorColors.primary} />
-                                        <Text style={s.rxText}>{rx}</Text>
+                                        <Feather name="package" size={13} color={colors.primary} />
+                                        <ThemedText color="primary" size="sm" style={s.rxText}>{rx}</ThemedText>
                                     </View>
                                 ))}
 
@@ -215,9 +219,9 @@ function HistoryTab({ records }: { records: MedicalRecord[] }) {
                                 {record.follow_up_date && (
                                     <View style={s.followUpBanner}>
                                         <Feather name="clock" size={14} color="#92400E" />
-                                        <Text style={s.followUpText}>
+                                        <ThemedText weight="medium" size="sm" style={s.followUpText}>
                                             Follow-up scheduled: {formatRecordDate(record.follow_up_date)}
-                                        </Text>
+                                        </ThemedText>
                                     </View>
                                 )}
                             </View>
@@ -232,10 +236,11 @@ function HistoryTab({ records }: { records: MedicalRecord[] }) {
 // ─── Tab: Patient Profile ───────────────────────────────────────────────────
 
 function ProfileTab({ patient }: { patient: RealPatientProfile }) {
+    const { colors } = useTheme();
     return (
         <View>
             {/* Personal Information */}
-            <Text style={s.sectionLabel}>Personal Information</Text>
+            <ThemedText color="muted" weight="semiBold" size="sm" style={s.sectionLabel}>Personal Information</ThemedText>
             <View style={s.infoCard}>
                 <InfoRow icon="user" label="Full Name" value={patient.full_name} />
                 <InfoRow icon="calendar" label="Date of Birth" value={patient.date_of_birth ?? '—'} />
@@ -245,15 +250,15 @@ function ProfileTab({ patient }: { patient: RealPatientProfile }) {
             </View>
 
             {/* Medical Information */}
-            <Text style={[s.sectionLabel, { marginTop: spacing['2xl'] }]}>
+            <ThemedText color="muted" weight="semiBold" size="sm" style={[s.sectionLabel, { marginTop: spacing['2xl'] }]}>
                 Medical Information
-            </Text>
+            </ThemedText>
 
             {/* Allergies */}
             <View style={s.medicalBlock}>
                 <View style={s.medicalBlockHeader}>
-                    <Feather name="alert-circle" size={15} color={doctorColors.error} />
-                    <Text style={s.medicalBlockTitle}>Known Allergies</Text>
+                    <Feather name="alert-circle" size={15} color="#EF4444" />
+                    <ThemedText color="primary" weight="semiBold" size="sm" style={s.medicalBlockTitle}>Known Allergies</ThemedText>
                 </View>
                 <View style={s.badgeRow}>
                     {(patient.allergies?.length ?? 0) > 0 ? (
@@ -261,7 +266,7 @@ function ProfileTab({ patient }: { patient: RealPatientProfile }) {
                             <Badge key={a} label={a} variant="danger" />
                         ))
                     ) : (
-                        <Text style={s.emptyMedicalText}>No known allergies</Text>
+                        <ThemedText color="muted" size="sm" style={s.emptyMedicalText}>No known allergies</ThemedText>
                     )}
                 </View>
             </View>
@@ -269,8 +274,8 @@ function ProfileTab({ patient }: { patient: RealPatientProfile }) {
             {/* Existing Conditions */}
             <View style={s.medicalBlock}>
                 <View style={s.medicalBlockHeader}>
-                    <Feather name="activity" size={15} color={doctorColors.warning} />
-                    <Text style={s.medicalBlockTitle}>Existing Conditions</Text>
+                    <Feather name="activity" size={15} color="#F59E0B" />
+                    <ThemedText color="primary" weight="semiBold" size="sm" style={s.medicalBlockTitle}>Existing Conditions</ThemedText>
                 </View>
                 <View style={s.badgeRow}>
                     {(patient.existing_conditions?.length ?? 0) > 0 ? (
@@ -278,17 +283,17 @@ function ProfileTab({ patient }: { patient: RealPatientProfile }) {
                             <Badge key={c} label={c} variant="info" />
                         ))
                     ) : (
-                        <Text style={s.emptyMedicalText}>No existing conditions</Text>
+                        <ThemedText color="muted" size="sm" style={s.emptyMedicalText}>No existing conditions</ThemedText>
                     )}
                 </View>
             </View>
 
             {/* Emergency Contact */}
             <View style={s.medicalBlock}>
-                <Text style={s.medicalBlockTitle}>Emergency Contact</Text>
-                <View style={s.emergencyCard}>
-                    <Text style={s.emergencyName}>{patient.emergency_contact_name ?? '—'}</Text>
-                    <Text style={s.emergencyPhone}>{patient.emergency_contact_phone ?? '—'}</Text>
+                <ThemedText color="primary" weight="semiBold" size="sm" style={s.medicalBlockTitle}>Emergency Contact</ThemedText>
+                <View style={[s.emergencyCard, { backgroundColor: colors.surfaceMuted }]}>
+                    <ThemedText color="primary" weight="semiBold" size="base" style={s.emergencyName}>{patient.emergency_contact_name ?? '—'}</ThemedText>
+                    <ThemedText color="muted" size="sm" style={s.emergencyPhone}>{patient.emergency_contact_phone ?? '—'}</ThemedText>
                 </View>
             </View>
         </View>
@@ -298,6 +303,7 @@ function ProfileTab({ patient }: { patient: RealPatientProfile }) {
 // ─── Tab: Medications ───────────────────────────────────────────────────────
 
 function MedicationsTab({ records }: { records: MedicalRecord[] }) {
+    const { colors } = useTheme();
     const allRx = records.flatMap((r) =>
         r.prescriptions.map((p) => ({
             key: `${r.id}-${p.id}`,
@@ -310,10 +316,10 @@ function MedicationsTab({ records }: { records: MedicalRecord[] }) {
     if (allRx.length === 0) {
         return (
             <View>
-                <Text style={s.sectionLabel}>Current & Past Medications</Text>
+                <ThemedText color="muted" weight="semiBold" size="sm" style={s.sectionLabel}>Current & Past Medications</ThemedText>
                 <View style={{ alignItems: 'center', paddingVertical: spacing['3xl'] }}>
-                    <Feather name="package" size={32} color={doctorColors.textMuted} />
-                    <Text style={{ ...typography.size.sm, color: doctorColors.textMuted, marginTop: spacing.md }}>No medications prescribed yet</Text>
+                    <Feather name="package" size={32} color={colors.textMuted} />
+                    <ThemedText color="muted" size="sm" style={{ marginTop: spacing.md }}>No medications prescribed yet</ThemedText>
                 </View>
             </View>
         );
@@ -321,17 +327,17 @@ function MedicationsTab({ records }: { records: MedicalRecord[] }) {
 
     return (
         <View>
-            <Text style={s.sectionLabel}>Current & Past Medications</Text>
+            <ThemedText color="muted" weight="semiBold" size="sm" style={s.sectionLabel}>Current & Past Medications</ThemedText>
             {allRx.map((rx) => (
-                <View key={rx.key} style={s.medicationRow}>
-                    <View style={s.medicationIcon}>
-                        <Feather name="package" size={18} color={doctorColors.primary} />
+                <View key={rx.key} style={[s.medicationRow, { borderColor: colors.borderLight }]}>
+                    <View style={[s.medicationIcon, { backgroundColor: colors.primaryLight }]}>
+                        <Feather name="package" size={18} color={colors.primary} />
                     </View>
                     <View style={s.medicationInfo}>
-                        <Text style={s.medicationName}>{rx.label}</Text>
-                        <Text style={s.medicationMeta}>
+                        <ThemedText color="primary" weight="semiBold" size="base" style={s.medicationName}>{rx.label}</ThemedText>
+                        <ThemedText color="muted" size="sm" style={s.medicationMeta}>
                             Prescribed on {rx.date} for {rx.diagnosis}
-                        </Text>
+                        </ThemedText>
                     </View>
                 </View>
             ))}
@@ -343,6 +349,7 @@ function MedicationsTab({ records }: { records: MedicalRecord[] }) {
 
 export default function PatientChartModal({ visible, patient, onClose, onNewPrescription }: PatientChartModalProps) {
     const insets = useSafeAreaInsets();
+    const { colors } = useTheme();
     const { panHandlers, animatedStyle } = useSwipeDown(onClose);
     const [activeTab, setActiveTab] = useState<TabId>('history');
     const { token } = useAuth();
@@ -375,10 +382,10 @@ export default function PatientChartModal({ visible, patient, onClose, onNewPres
             <Pressable style={s.backdrop} onPress={onClose} />
 
             {/* Sheet */}
-            <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom }]}>
+            <Animated.View style={[s.sheet, { backgroundColor: colors.surface }, animatedStyle, { paddingBottom: insets.bottom }]}>
                 {/* Handle */}
                 <View style={s.handleRow} {...panHandlers}>
-                    <View style={s.handle} />
+                    <View style={[s.handle, { backgroundColor: colors.border }]} />
                 </View>
 
                 {/* Header */}
@@ -388,32 +395,32 @@ export default function PatientChartModal({ visible, patient, onClose, onNewPres
                             <Feather name="user" size={22} color="#374151" />
                         </View>
                         <View style={s.headerText}>
-                            <Text style={s.patientName}>{patient.full_name}</Text>
-                            <Text style={s.patientSubtitle}>
+                            <ThemedText color="primary" weight="bold" size="xl" style={s.patientName}>{patient.full_name}</ThemedText>
+                            <ThemedText color="muted" size="xs" style={s.patientSubtitle}>
                                 Patient ID: {patient.id.slice(0, 8)} • {patient.existing_conditions?.join(', ') ?? '—'}
-                            </Text>
+                            </ThemedText>
                         </View>
                     </View>
                 </View>
 
                 {/* Tab Bar */}
-                <View style={s.tabRow}>
+                <View style={[s.tabRow, { borderBottomColor: colors.borderLight }]}>
                     {TAB_CONFIG.map((tab) => {
                         const active = activeTab === tab.id;
                         return (
                             <Pressable
                                 key={tab.id}
                                 onPress={() => setActiveTab(tab.id)}
-                                style={[s.tab, active && s.tabActive]}
+                                style={[s.tab, active && [s.tabActive, { borderBottomColor: colors.primary }]]}
                             >
                                 <Feather
                                     name={tab.icon}
                                     size={14}
-                                    color={active ? doctorColors.primary : doctorColors.textMuted}
+                                    color={active ? colors.primary : colors.textMuted}
                                 />
-                                <Text style={[s.tabText, active && s.tabTextActive]}>
+                                <ThemedText weight={active ? "semiBold" : "medium"} size="sm" style={[s.tabText, active && [s.tabTextActive, { color: colors.primary }]]}>
                                     {tab.label}
-                                </Text>
+                                </ThemedText>
                             </Pressable>
                         );
                     })}
@@ -427,7 +434,7 @@ export default function PatientChartModal({ visible, patient, onClose, onNewPres
                 >
                     {loadingRecords ? (
                         <View style={{ alignItems: 'center', paddingVertical: spacing['3xl'] }}>
-                            <ActivityIndicator size="large" color={doctorColors.primary} />
+                            <ActivityIndicator size="large" color={colors.primary} />
                         </View>
                     ) : (
                         <>
@@ -439,25 +446,27 @@ export default function PatientChartModal({ visible, patient, onClose, onNewPres
                 </ScrollView>
 
                 {/* Footer (matching web) */}
-                <View style={s.footer}>
+                <View style={[s.footer, { borderTopColor: colors.borderLight }]}>
                     <Pressable
                         onPress={onClose}
                         style={({ pressed }) => [
                             s.footerBtnOutline,
+                            { borderColor: colors.border },
                             pressed && { opacity: 0.7 },
                         ]}
                     >
-                        <Text style={s.footerBtnOutlineText}>Close</Text>
+                        <ThemedText color="primary" weight="medium" size="sm" style={s.footerBtnOutlineText}>Close</ThemedText>
                     </Pressable>
                     <Pressable
                         onPress={onNewPrescription}
                         style={({ pressed }) => [
                             s.footerBtnPrimary,
-                            pressed && { backgroundColor: doctorColors.primaryDark },
+                            { backgroundColor: colors.primary },
+                            pressed && { opacity: 0.85 },
                         ]}
                     >
                         <Feather name="file-text" size={15} color="#fff" />
-                        <Text style={s.footerBtnPrimaryText}>New Prescription</Text>
+                        <ThemedText weight="semiBold" size="sm" style={s.footerBtnPrimaryText}>New Prescription</ThemedText>
                     </Pressable>
                 </View>
             </Animated.View>
@@ -478,7 +487,6 @@ const s = StyleSheet.create({
         left: 0,
         right: 0,
         height: SCREEN_HEIGHT * 0.9,
-        backgroundColor: doctorColors.surface,
         borderTopLeftRadius: radii.xl,
         borderTopRightRadius: radii.xl,
         ...shadows.elevated,
@@ -486,7 +494,7 @@ const s = StyleSheet.create({
 
     // Handle
     handleRow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
-    handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: doctorColors.border },
+    handle: { width: 40, height: 4, borderRadius: 2 },
 
     // Header
     header: {
@@ -500,14 +508,8 @@ const s = StyleSheet.create({
     avatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
     headerText: { flex: 1 },
     patientName: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size.xl,
-        color: doctorColors.textPrimary,
     },
     patientSubtitle: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.xs,
-        color: doctorColors.textMuted,
         marginTop: spacing.xxs,
     },
 
@@ -517,7 +519,6 @@ const s = StyleSheet.create({
         flexDirection: 'row',
         marginHorizontal: spacing.xl,
         borderBottomWidth: 1,
-        borderBottomColor: doctorColors.borderLight,
     },
     tab: {
         flex: 1,
@@ -529,13 +530,10 @@ const s = StyleSheet.create({
         borderBottomWidth: 2,
         borderBottomColor: 'transparent',
     },
-    tabActive: { borderBottomColor: doctorColors.primary },
+    tabActive: { },
     tabText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
     },
-    tabTextActive: { color: doctorColors.primary, fontFamily: typography.fontFamily.semiBold },
+    tabTextActive: { },
 
     // Scroll content
     tabContent: { flex: 1 },
@@ -543,9 +541,6 @@ const s = StyleSheet.create({
 
     // Shared section label
     sectionLabel: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
         letterSpacing: 0.4,
         textTransform: 'uppercase',
         marginBottom: spacing.md,
@@ -564,34 +559,21 @@ const s = StyleSheet.create({
         padding: spacing.lg,
         borderRadius: radii.md,
         borderWidth: 1,
-        borderColor: doctorColors.borderLight,
     },
     consultationItemActive: {
-        borderColor: doctorColors.primary,
-        backgroundColor: doctorColors.primaryLight,
     },
     consultationItemLeft: { flex: 1, marginRight: spacing.md },
     consultationDiagnosis: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
-        color: doctorColors.textPrimary,
     },
     consultationDate: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
         marginTop: spacing.xxs,
     },
     rxBadge: {
-        backgroundColor: doctorColors.surfaceMuted,
         paddingHorizontal: spacing.sm,
         paddingVertical: spacing.xs,
         borderRadius: radii.sm,
     },
     rxBadgeText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.xs,
-        color: doctorColors.textSecondary,
     },
 
     // Detail panel
@@ -600,12 +582,8 @@ const s = StyleSheet.create({
         padding: spacing.lg,
         borderRadius: radii.md,
         borderWidth: 1,
-        borderColor: doctorColors.borderLight,
     },
     detailTitle: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size.lg,
-        color: doctorColors.textPrimary,
     },
     detailDateRow: {
         flexDirection: 'row',
@@ -614,26 +592,16 @@ const s = StyleSheet.create({
         marginTop: spacing.xs,
     },
     detailDate: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
     },
     separator: {
         height: 1,
-        backgroundColor: doctorColors.borderLight,
         marginVertical: spacing.lg,
     },
     detailSectionLabel: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
         marginBottom: spacing.sm,
         marginTop: spacing.lg,
     },
     detailBody: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
         lineHeight: 20,
     },
     vitalsGrid: {
@@ -649,9 +617,6 @@ const s = StyleSheet.create({
         paddingVertical: spacing.xs,
     },
     vitalText: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
     },
     rxRow: {
         flexDirection: 'row',
@@ -660,9 +625,6 @@ const s = StyleSheet.create({
         marginBottom: spacing.sm,
     },
     rxText: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
         flex: 1,
     },
     followUpBanner: {
@@ -675,8 +637,6 @@ const s = StyleSheet.create({
         marginTop: spacing.lg,
     },
     followUpText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
         color: '#92400E',
     },
     emptyDetail: {
@@ -685,9 +645,6 @@ const s = StyleSheet.create({
         paddingVertical: spacing['4xl'],
     },
     emptyDetailText: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
         marginTop: spacing.md,
     },
 
@@ -702,14 +659,8 @@ const s = StyleSheet.create({
     },
     infoRowText: {},
     infoLabel: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.xs,
-        color: doctorColors.textMuted,
     },
     infoValue: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
-        color: doctorColors.textPrimary,
     },
     medicalBlock: {
         marginTop: spacing.lg,
@@ -721,9 +672,6 @@ const s = StyleSheet.create({
         marginBottom: spacing.sm,
     },
     medicalBlockTitle: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
     },
     badgeRow: {
         flexDirection: 'row',
@@ -736,29 +684,17 @@ const s = StyleSheet.create({
         borderRadius: radii.full,
     },
     badgeText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
     },
     emptyMedicalText: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
     },
     emergencyCard: {
         padding: spacing.md,
         borderRadius: radii.md,
-        backgroundColor: doctorColors.surfaceMuted,
         marginTop: spacing.sm,
     },
     emergencyName: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
-        color: doctorColors.textPrimary,
     },
     emergencyPhone: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
         marginTop: spacing.xxs,
     },
 
@@ -770,24 +706,16 @@ const s = StyleSheet.create({
         padding: spacing.lg,
         borderRadius: radii.md,
         borderWidth: 1,
-        borderColor: doctorColors.borderLight,
         marginBottom: spacing.md,
     },
     medicationIcon: {
         padding: spacing.sm,
         borderRadius: radii.md,
-        backgroundColor: doctorColors.primaryLight,
     },
     medicationInfo: { flex: 1 },
     medicationName: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
-        color: doctorColors.textPrimary,
     },
     medicationMeta: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
         marginTop: spacing.xs,
     },
 
@@ -799,19 +727,14 @@ const s = StyleSheet.create({
         paddingHorizontal: spacing.xl,
         paddingVertical: spacing.lg,
         borderTopWidth: 1,
-        borderTopColor: doctorColors.borderLight,
     },
     footerBtnOutline: {
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.xl,
         borderRadius: radii.md,
         borderWidth: 1,
-        borderColor: doctorColors.border,
     },
     footerBtnOutlineText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
     },
     footerBtnPrimary: {
         flexDirection: 'row',
@@ -820,11 +743,8 @@ const s = StyleSheet.create({
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.xl,
         borderRadius: radii.md,
-        backgroundColor: doctorColors.primary,
     },
     footerBtnPrimaryText: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
         color: '#FFFFFF',
     },
 });

@@ -84,3 +84,19 @@ export async function registerDoctor(data: DoctorRegistration): Promise<AuthResp
         },
     });
 }
+
+/**
+ * Submit a request to affiliate with a specific hospital.
+ * Sets status to PENDING and returns updated user details.
+ */
+export async function requestAffiliation(
+    token: string,
+    hospitalId: string,
+): Promise<import('./types').MeResponse> {
+    return apiRequest<import('./types').MeResponse>({
+        method: 'POST',
+        path: '/api/users/request-affiliation',
+        body: { hospital_id: hospitalId },
+        token,
+    });
+}

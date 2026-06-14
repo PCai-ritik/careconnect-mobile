@@ -14,34 +14,39 @@ import { View, StyleSheet } from 'react-native';
 import { Tabs, Redirect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/useAuth';
-import { DoctorThemeProvider } from '@/providers/ThemeProvider';
-import { doctorColors, typography, shadows } from '@/constants/theme';
+import { DoctorThemeProvider, useTheme } from '@/providers/ThemeProvider';
+import { doctorColors, typography as staticTypography, shadows } from '@/constants/theme';
 import DoctorActionPopover from '@/components/doctor/DoctorActionPopover';
 import NewPrescriptionModal from '@/components/doctor/NewPrescriptionModal';
 import AddPatientModal from '@/components/doctor/AddPatientModal';
 
 const TAB_INACTIVE_COLOR = '#94A3B8';
 
-export default function DoctorTabLayout() {
-    const { user, isLoading } = useAuth();
+function DoctorTabsInner() {
+    const { colors, typography } = useTheme();
     const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
     const [isPrescriptionOpen, setIsPrescriptionOpen] = useState(false);
     const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
 
-    if (isLoading) return null;
-    if (!user) return <Redirect href="/(auth)/doctor-login" />;
-    if (user.role !== 'DOCTOR') return <Redirect href="/(caregiver)" />;
-
     return (
-        <DoctorThemeProvider>
+        <>
             <Tabs
                 screenOptions={{
                     headerShown: false,
-                    tabBarActiveTintColor: doctorColors.primary,
+                    tabBarActiveTintColor: colors.primary,
                     tabBarInactiveTintColor: TAB_INACTIVE_COLOR,
                     tabBarShowLabel: true,
-                    tabBarLabelStyle: styles.tabLabel,
-                    tabBarStyle: styles.tabBar,
+                    tabBarLabelStyle: {
+                        fontFamily: typography.heading.medium,
+                        fontSize: 10,
+                        marginTop: -2,
+                    },
+                    tabBarStyle: {
+                        backgroundColor: colors.surface,
+                        borderTopWidth: 1,
+                        borderTopColor: colors.borderLight || '#E9ECEF',
+                        elevation: 0,
+                    },
                 }}
             >
                 {/* ── Slot 1: Home ── */}
@@ -73,7 +78,7 @@ export default function DoctorTabLayout() {
                         title: '',
                         tabBarLabel: () => null,
                         tabBarIcon: () => (
-                            <View style={styles.centerBtn}>
+                            <View style={[styles.centerBtn, { backgroundColor: colors.primary }]}>
                                 <Feather name="plus" size={26} color="#FFFFFF" />
                             </View>
                         ),
@@ -139,27 +144,29 @@ export default function DoctorTabLayout() {
                 visible={isAddPatientOpen}
                 onClose={() => setIsAddPatientOpen(false)}
             />
+        </>
+    );
+}
+
+export default function DoctorTabLayout() {
+    const { user, isLoading } = useAuth();
+
+    if (isLoading) return null;
+    if (!user) return <Redirect href="/(auth)/doctor-login" />;
+    if (user.role !== 'DOCTOR') return <Redirect href="/(caregiver)" />;
+
+    return (
+        <DoctorThemeProvider>
+            <DoctorTabsInner />
         </DoctorThemeProvider>
     );
 }
 
 const styles = StyleSheet.create({
-    tabBar: {
-        backgroundColor: doctorColors.surface,
-        borderTopWidth: 1,
-        borderTopColor: doctorColors.borderLight,
-        elevation: 0,
-    },
-    tabLabel: {
-        fontFamily: typography.fontFamily.medium,
-        fontSize: 10,
-        marginTop: -2,
-    },
     centerBtn: {
         width: 52,
         height: 52,
         borderRadius: 26,
-        backgroundColor: doctorColors.primary,
         alignItems: 'center',
         justifyContent: 'center',
         marginTop: -15,

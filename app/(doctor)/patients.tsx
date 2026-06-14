@@ -20,11 +20,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import {
     spacing,
-    doctorColors,
-    typography,
     shadows,
     radii,
 } from '@/constants/theme';
+import { useTheme } from '@/providers/ThemeProvider';
+import { ThemedText, ThemedView } from '@/components/shared/Themed';
 import { useAuth } from '@/hooks/useAuth';
 import { getPatients, addPatient } from '@/services/doctor';
 import type { PatientProfile, PatientCreate } from '@/services/types';
@@ -104,27 +104,28 @@ function PatientCard({
 }) {
     const age = calcAge(patient.date_of_birth);
     const condition = patient.existing_conditions?.join(', ') ?? '—';
+    const { colors } = useTheme();
     return (
         <Pressable
-            style={({ pressed }) => [s.card, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [s.card, { backgroundColor: colors.surface }, pressed && { opacity: 0.7 }]}
             onPress={onPress}
         >
             <Avatar name={patient.full_name} size={50} />
 
             <View style={s.cardInfo}>
-                <Text style={s.cardName}>{patient.full_name}</Text>
+                <ThemedText weight="semiBold" size="base" color="primary" style={s.cardName}>{patient.full_name}</ThemedText>
                 {(age || patient.gender) && (
-                    <Text style={s.cardDemographics}>
+                    <ThemedText color="secondary" size="xs" style={s.cardDemographics}>
                         {age ? `Age: ${age}` : ''}
                         {age && patient.gender ? '  •  ' : ''}
                         {patient.gender ?? ''}
-                    </Text>
+                    </ThemedText>
                 )}
-                <Text style={s.cardCondition}>{condition}</Text>
-                <Text style={s.cardVisit}>Added: {timeAgo(patient.created_at)}</Text>
+                <ThemedText color="brand" weight="medium" size="sm" style={s.cardCondition}>{condition}</ThemedText>
+                <ThemedText color="muted" size="xs" style={s.cardVisit}>Added: {timeAgo(patient.created_at)}</ThemedText>
             </View>
 
-            <Feather name="chevron-right" size={20} color={doctorColors.textMuted} />
+            <Feather name="chevron-right" size={20} color={colors.textMuted} />
         </Pressable>
     );
 }
@@ -133,6 +134,7 @@ function PatientCard({
 
 export default function PatientsScreen() {
     const { token, user } = useAuth();
+    const { colors } = useTheme();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedPatient, setSelectedPatient] = useState<PatientProfile | null>(null);
     const [isChartOpen, setIsChartOpen] = useState(false);
@@ -181,17 +183,17 @@ export default function PatientsScreen() {
     };
 
     return (
-        <SafeAreaView style={s.container} edges={['top']}>
+        <SafeAreaView style={[s.container, { backgroundColor: colors.background }]} edges={['top']}>
             {/* ── Header ── */}
             <View style={s.header}>
                 <View>
-                    <Text style={s.headerTitle}>Patients</Text>
-                    <Text style={s.headerSubtitle}>
+                    <ThemedText color="primary" weight="bold" size="2xl" style={s.headerTitle}>Patients</ThemedText>
+                    <ThemedText color="muted" size="sm" style={s.headerSubtitle}>
                         {patients.length} patients in directory
-                    </Text>
+                    </ThemedText>
                 </View>
                 <Pressable
-                    style={({ pressed }) => [s.addPatientBtn, pressed && { opacity: 0.7 }]}
+                    style={({ pressed }) => [s.addPatientBtn, { backgroundColor: colors.primary }, pressed && { opacity: 0.7 }]}
                     onPress={() => setIsAddPatientOpen(true)}
                 >
                     <Feather name="user-plus" size={18} color="#fff" />
@@ -199,18 +201,18 @@ export default function PatientsScreen() {
             </View>
 
             {/* ── Search Bar ── */}
-            <View style={s.searchBar}>
-                <Feather name="search" size={18} color={doctorColors.textMuted} />
+            <View style={[s.searchBar, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                <Feather name="search" size={18} color={colors.textMuted} />
                 <TextInput
-                    style={s.searchInput}
+                    style={[s.searchInput, { color: colors.textPrimary }]}
                     placeholder="Search by name or condition..."
-                    placeholderTextColor={doctorColors.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                 />
                 {searchQuery.length > 0 && (
                     <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
-                        <Feather name="x" size={16} color={doctorColors.textMuted} />
+                        <Feather name="x" size={16} color={colors.textMuted} />
                     </Pressable>
                 )}
             </View>
@@ -228,21 +230,21 @@ export default function PatientsScreen() {
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        tintColor={doctorColors.primary}
+                        tintColor={colors.primary}
                     />
                 }
                 ListEmptyComponent={
                     loading ? (
                         <View style={s.emptyState}>
-                            <ActivityIndicator size="large" color={doctorColors.primary} />
+                            <ActivityIndicator size="large" color={colors.primary} />
                         </View>
                     ) : (
                         <View style={s.emptyState}>
-                            <Feather name="search" size={40} color={doctorColors.textMuted} />
-                            <Text style={s.emptyTitle}>No patients found</Text>
-                            <Text style={s.emptySubtitle}>
+                            <Feather name="search" size={40} color={colors.textMuted} />
+                            <ThemedText color="primary" weight="semiBold" size="lg" style={s.emptyTitle}>No patients found</ThemedText>
+                            <ThemedText color="muted" size="sm" style={s.emptySubtitle}>
                                 Try a different search term
-                            </Text>
+                            </ThemedText>
                         </View>
                     )
                 }
@@ -282,7 +284,6 @@ export default function PatientsScreen() {
 const s = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: doctorColors.background,
     },
 
     // Header
@@ -295,21 +296,14 @@ const s = StyleSheet.create({
         paddingBottom: spacing.md,
     },
     headerTitle: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size['2xl'],
-        color: doctorColors.textPrimary,
     },
     headerSubtitle: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
         marginTop: spacing.xxs,
     },
     addPatientBtn: {
         width: 40,
         height: 40,
         borderRadius: radii.full,
-        backgroundColor: doctorColors.primary,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -324,15 +318,10 @@ const s = StyleSheet.create({
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.md,
         borderWidth: 1,
-        borderColor: '#E2E8F0',
         borderRadius: radii.md,
-        backgroundColor: '#F8FAFC',
     },
     searchInput: {
         flex: 1,
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
         padding: 0,
     },
 
@@ -347,7 +336,6 @@ const s = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.md,
-        backgroundColor: doctorColors.surface,
         borderRadius: radii.lg,
         padding: spacing.lg,
         marginBottom: spacing.md,
@@ -358,24 +346,12 @@ const s = StyleSheet.create({
         gap: spacing.xxs,
     },
     cardName: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
-        color: doctorColors.textPrimary,
     },
     cardDemographics: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.xs,
-        color: doctorColors.textSecondary,
     },
     cardCondition: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.primary,
     },
     cardVisit: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.xs,
-        color: doctorColors.textMuted,
     },
 
     // Avatar
@@ -392,13 +368,7 @@ const s = StyleSheet.create({
         gap: spacing.sm,
     },
     emptyTitle: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.lg,
-        color: doctorColors.textPrimary,
     },
     emptySubtitle: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
     },
 });

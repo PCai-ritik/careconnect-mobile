@@ -22,12 +22,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useTheme } from '@/providers/ThemeProvider';
+import { ThemedText, ThemedView } from '@/components/shared/Themed';
 import {
     spacing,
-    doctorColors,
-    typography,
     shadows,
     radii,
+    typography,
 } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { getAppointments, getPatients, updateAppointmentStatus } from '@/services/doctor';
@@ -129,27 +130,30 @@ function Avatar({ name, size = 44 }: { name: string; size?: number }) {
 
 function StatusBadge({ status }: { status: 'upcoming' | 'completed' }) {
     const isUpcoming = status === 'upcoming';
+    const { colors } = useTheme();
     return (
         <View
             style={[
                 s.badge,
-                { backgroundColor: isUpcoming ? '#DCFCE7' : '#F1F5F9' },
+                { backgroundColor: isUpcoming ? '#DCFCE7' : colors.surfaceMuted },
             ]}
         >
             <View
                 style={[
                     s.badgeDot,
-                    { backgroundColor: isUpcoming ? '#22C55E' : '#94A3B8' },
+                    { backgroundColor: isUpcoming ? '#22C55E' : colors.textMuted },
                 ]}
             />
-            <Text
+            <ThemedText
+                weight="medium"
+                size="xs"
                 style={[
                     s.badgeText,
-                    { color: isUpcoming ? '#15803D' : '#64748B' },
+                    { color: isUpcoming ? '#15803D' : colors.textSecondary },
                 ]}
             >
                 {isUpcoming ? 'Confirmed' : 'Completed'}
-            </Text>
+            </ThemedText>
         </View>
     );
 }
@@ -166,24 +170,25 @@ function AppointmentCard({
     onReschedule: () => void;
 }) {
     const isUpcoming = appointment.displayStatus === 'upcoming';
+    const { colors } = useTheme();
 
     return (
-        <View style={s.card}>
+        <ThemedView bg="surface" rounded style={s.card}>
             {/* Top row */}
             <View style={s.cardTop}>
                 <Avatar name={appointment.patientName} size={46} />
                 <View style={s.cardInfo}>
-                    <Text style={s.cardName}>{appointment.patientName}</Text>
-                    <Text style={s.cardMeta}>
+                    <ThemedText color="primary" weight="semiBold" size="base" style={s.cardName}>{appointment.patientName}</ThemedText>
+                    <ThemedText color="muted" size="xs" style={s.cardMeta}>
                         {appointment.date}  •  {appointment.time}
-                    </Text>
-                    <Text style={s.cardType}>{appointment.type}</Text>
+                    </ThemedText>
+                    <ThemedText color="secondary" weight="medium" size="xs" style={s.cardType}>{appointment.type}</ThemedText>
                 </View>
                 <StatusBadge status={appointment.displayStatus} />
             </View>
 
             {/* Action row */}
-            <View style={s.cardActions}>
+            <View style={[s.cardActions, { borderTopColor: colors.borderLight }]}>
                 {isUpcoming ? (
                     <>
                         <Pressable
@@ -194,33 +199,35 @@ function AppointmentCard({
                             onPress={onReschedule}
                         >
                             <Feather name="calendar" size={15} color="#D97706" />
-                            <Text style={s.rescheduleBtnText}>Reschedule</Text>
+                            <ThemedText weight="medium" size="sm" style={s.rescheduleBtnText}>Reschedule</ThemedText>
                         </Pressable>
                         <Pressable
                             style={({ pressed }) => [
                                 s.joinBtn,
+                                { backgroundColor: colors.primary },
                                 pressed && { opacity: 0.85 },
                             ]}
                             onPress={onJoin}
                         >
                             <Feather name="video" size={15} color="#fff" />
-                            <Text style={s.joinBtnText}>Join Call</Text>
+                            <ThemedText weight="semiBold" size="sm" style={s.joinBtnText}>Join Call</ThemedText>
                         </Pressable>
                     </>
                 ) : (
                     <Pressable
                         style={({ pressed }) => [
                             s.summaryBtn,
+                            { borderColor: colors.borderLight },
                             pressed && { opacity: 0.7 },
                         ]}
                         onPress={() => { }}
                     >
-                        <Feather name="file-text" size={15} color={doctorColors.primary} />
-                        <Text style={s.summaryBtnText}>View Summary</Text>
+                        <Feather name="file-text" size={15} color={colors.primary} />
+                        <ThemedText color="brand" weight="medium" size="sm" style={s.summaryBtnText}>View Summary</ThemedText>
                     </Pressable>
                 )}
             </View>
-        </View>
+        </ThemedView>
     );
 }
 
@@ -231,6 +238,7 @@ function AppointmentCard({
 export default function AppointmentsScreen() {
     const router = useRouter();
     const { token } = useAuth();
+    const { colors } = useTheme();
     const [search, setSearch] = useState('');
     const [visibleCount, setVisibleCount] = useState(10);
 
@@ -298,7 +306,6 @@ export default function AppointmentsScreen() {
         setActionLoading(true);
         try {
             await updateAppointmentStatus(token, rescheduleTarget.id, 'CANCELLED');
-            // Update local state
             setDisplayAppointments((prev) =>
                 prev.map((a) =>
                     a.id === rescheduleTarget.id
@@ -318,94 +325,82 @@ export default function AppointmentsScreen() {
     }, [rescheduleTarget, token]);
 
     return (
-        <SafeAreaView style={s.container} edges={['top']}>
-            {/* ── Header ── */}
+        <SafeAreaView style={[s.container, { backgroundColor: colors.background }]} edges={['top']}>
             <View style={s.header}>
-                <Text style={s.headerTitle}>Appointments</Text>
-                <Text style={s.headerSubtitle}>
-                    All appointments are instantly confirmed
-                </Text>
+                <ThemedText variant="heading" size="2xl" weight="bold" color="primary" style={s.headerTitle}>Schedule</ThemedText>
+                <ThemedText color="muted" size="sm" style={s.headerSubtitle}>
+                    Manage your upcoming consultations
+                </ThemedText>
             </View>
 
-            {/* ── Status Pills (matching web) ── */}
             <View style={s.statusRow}>
                 <View style={s.statusPill}>
                     <View style={[s.statusDot, { backgroundColor: '#22C55E' }]} />
-                    <Text style={s.statusText}>{upcomingCount} upcoming</Text>
+                    <ThemedText color="muted" size="sm" style={s.statusText}>Upcoming ({upcomingCount})</ThemedText>
                 </View>
-                <View style={s.statusDivider} />
+                <View style={[s.statusDivider, { backgroundColor: colors.border }]} />
                 <View style={s.statusPill}>
-                    <View style={[s.statusDot, { backgroundColor: '#94A3B8' }]} />
-                    <Text style={s.statusText}>{completedCount} completed</Text>
+                    <View style={[s.statusDot, { backgroundColor: colors.textMuted }]} />
+                    <ThemedText color="muted" size="sm" style={s.statusText}>Completed ({completedCount})</ThemedText>
                 </View>
             </View>
 
-            {/* ── Search Bar ── */}
-            <View style={s.searchBar}>
-                <Feather name="search" size={18} color={doctorColors.textMuted} />
+            <View style={[s.searchBar, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                <Feather name="search" size={20} color={colors.textMuted} />
                 <TextInput
-                    style={s.searchInput}
+                    style={[s.searchInput, { color: colors.textPrimary }]}
                     placeholder="Search patients..."
-                    placeholderTextColor={doctorColors.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     value={search}
-                    onChangeText={handleSearch}
+                    onChangeText={setSearch}
                 />
-                {search.length > 0 && (
-                    <Pressable onPress={() => handleSearch('')} hitSlop={8}>
-                        <Feather name="x" size={16} color={doctorColors.textMuted} />
-                    </Pressable>
-                )}
             </View>
 
-            {/* ── List ── */}
             <FlatList
-                data={visibleAppointments}
+                data={filtered.slice(0, visibleCount)}
                 keyExtractor={(item) => item.id}
+                contentContainerStyle={s.listContent}
                 renderItem={({ item }) => (
                     <AppointmentCard
                         appointment={item}
-                        onJoin={() =>
-                            router.push(`/(doctor)/consultation/${item.id}`)
-                        }
+                        onJoin={() => router.push(`/(doctor)/consultation/${item.id}` as any)}
                         onReschedule={() => {
                             setRescheduleTarget(item);
                             setShowRescheduleAlert(true);
                         }}
                     />
                 )}
-                contentContainerStyle={s.listContent}
-                showsVerticalScrollIndicator={false}
-                onEndReached={loadMore}
+                onEndReached={() => setVisibleCount((prev) => prev + 10)}
                 onEndReachedThreshold={0.5}
+                showsVerticalScrollIndicator={false}
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        tintColor={doctorColors.primary}
+                        tintColor={colors.primary}
                     />
                 }
                 ListEmptyComponent={
                     loading ? (
                         <View style={s.emptyState}>
-                            <ActivityIndicator size="large" color={doctorColors.primary} />
+                            <ActivityIndicator size="large" color={colors.primary} />
                         </View>
                     ) : (
                         <View style={s.emptyState}>
-                            <Feather name="search" size={40} color={doctorColors.textMuted} />
-                            <Text style={s.emptyText}>No appointments found</Text>
+                            <Feather name="search" size={40} color={colors.textMuted} />
+                            <ThemedText color="muted" size="base" style={s.emptyText}>No appointments found</ThemedText>
                         </View>
                     )
                 }
                 ListFooterComponent={
                     visibleCount < filtered.length ? (
                         <View style={{ paddingVertical: spacing.lg, alignItems: 'center' }}>
-                            <ActivityIndicator size="small" color={doctorColors.primary} />
+                            <ActivityIndicator size="small" color={colors.primary} />
                         </View>
                     ) : null
                 }
             />
 
-            {/* ── Emergency Reschedule Confirmation (matches web modal) ── */}
             <ThemedAlert
                 visible={showRescheduleAlert}
                 variant="warning"
@@ -421,7 +416,6 @@ export default function AppointmentsScreen() {
                 }}
             />
 
-            {/* ── Success Alert ── */}
             <ThemedAlert
                 visible={showSuccessAlert}
                 variant="success"
@@ -440,7 +434,6 @@ export default function AppointmentsScreen() {
 const s = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: doctorColors.background,
     },
 
     // Header
@@ -450,14 +443,8 @@ const s = StyleSheet.create({
         paddingBottom: spacing.md,
     },
     headerTitle: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size['2xl'],
-        color: doctorColors.textPrimary,
     },
     headerSubtitle: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
         marginTop: spacing.xs,
     },
 
@@ -480,14 +467,10 @@ const s = StyleSheet.create({
         borderRadius: 4,
     },
     statusText: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
     },
     statusDivider: {
         width: 1,
         height: 16,
-        backgroundColor: doctorColors.border,
     },
 
     // Search bar
@@ -500,15 +483,10 @@ const s = StyleSheet.create({
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.md,
         borderWidth: 1,
-        borderColor: doctorColors.border,
         borderRadius: radii.md,
-        backgroundColor: doctorColors.surface,
     },
     searchInput: {
         flex: 1,
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
         padding: 0,
     },
 
@@ -520,8 +498,6 @@ const s = StyleSheet.create({
 
     // Card
     card: {
-        backgroundColor: doctorColors.surface,
-        borderRadius: radii.lg,
         padding: spacing.lg,
         marginBottom: spacing.md,
         ...shadows.elevated,
@@ -536,19 +512,10 @@ const s = StyleSheet.create({
         gap: spacing.xxs,
     },
     cardName: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
-        color: doctorColors.textPrimary,
     },
     cardMeta: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.xs,
-        color: doctorColors.textMuted,
     },
     cardType: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.xs,
-        color: doctorColors.textSecondary,
     },
 
     // Avatar
@@ -572,8 +539,6 @@ const s = StyleSheet.create({
         borderRadius: 3,
     },
     badgeText: {
-        fontFamily: typography.fontFamily.medium,
-        fontSize: 11,
     },
 
     // Card actions
@@ -582,7 +547,6 @@ const s = StyleSheet.create({
         marginTop: spacing.md,
         paddingTop: spacing.md,
         borderTopWidth: 1,
-        borderTopColor: doctorColors.borderLight,
         justifyContent: 'flex-end',
         gap: spacing.sm,
     },
@@ -590,14 +554,11 @@ const s = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.sm,
-        backgroundColor: doctorColors.primary,
         paddingVertical: spacing.sm,
         paddingHorizontal: spacing.lg,
         borderRadius: radii.md,
     },
     joinBtnText: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
         color: '#FFFFFF',
     },
     summaryBtn: {
@@ -605,15 +566,11 @@ const s = StyleSheet.create({
         alignItems: 'center',
         gap: spacing.sm,
         borderWidth: 1,
-        borderColor: doctorColors.borderLight,
         paddingVertical: spacing.sm,
         paddingHorizontal: spacing.lg,
         borderRadius: radii.md,
     },
     summaryBtnText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.primary,
     },
 
     // Emergency Reschedule button (amber theme — matches web)
@@ -635,7 +592,6 @@ const s = StyleSheet.create({
         color: '#D97706',
     },
 
-// Pagination styles removed
 
     // Empty state
     emptyState: {
@@ -647,6 +603,6 @@ const s = StyleSheet.create({
     emptyText: {
         fontFamily: typography.fontFamily.regular,
         ...typography.size.base,
-        color: doctorColors.textMuted,
+        color: '#868E96',
     },
 });

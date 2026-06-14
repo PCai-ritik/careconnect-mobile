@@ -176,7 +176,7 @@ export interface MeResponse {
 export async function getMe(token: string): Promise<MeResponse> {
     return apiRequest<MeResponse>({
         method: 'GET',
-        path: '/auth/me',
+        path: '/api/me',
         token,
     });
 }

@@ -24,11 +24,11 @@ import useSwipeDown from '@/hooks/useSwipeDown';
 import { Feather } from '@expo/vector-icons';
 import {
     spacing,
-    doctorColors,
-    typography,
     shadows,
     radii,
 } from '@/constants/theme';
+import { useTheme } from '@/providers/ThemeProvider';
+import { ThemedText, ThemedView } from '@/components/shared/Themed';
 import { useAuth } from '@/hooks/useAuth';
 import { addPatient } from '@/services/doctor';
 import ThemedAlert from '@/components/doctor/ThemedAlert';
@@ -54,6 +54,7 @@ function formatAadhar(value: string): string {
 }
 
 export default function AddPatientModal({ visible, onClose, onPatientAdded }: AddPatientModalProps) {
+    const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const { panHandlers, animatedStyle } = useSwipeDown(onClose);
     const [fullName, setFullName] = useState('');
@@ -127,16 +128,16 @@ export default function AddPatientModal({ visible, onClose, onPatientAdded }: Ad
             >
                 <Pressable style={s.backdrop} onPress={onClose} />
 
-                <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom }]}>
+                <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom, backgroundColor: colors.surface }]}>
                     <View style={s.handleRow} {...panHandlers}>
-                        <View style={s.handle} />
+                        <View style={[s.handle, { backgroundColor: colors.border }]} />
                     </View>
 
                     {/* Header */}
                     <View style={s.header}>
                         <View>
-                            <Text style={s.headerTitle}>Register New Patient</Text>
-                            <Text style={s.headerSub}>Enter the patient's details to create their profile.</Text>
+                            <ThemedText color="primary" weight="bold" size="xl" style={s.headerTitle}>Register New Patient</ThemedText>
+                            <ThemedText color="muted" size="xs" style={s.headerSub}>Enter the patient's details to create their profile.</ThemedText>
                         </View>
                     </View>
 
@@ -147,129 +148,129 @@ export default function AddPatientModal({ visible, onClose, onPatientAdded }: Ad
                         keyboardShouldPersistTaps="handled"
                     >
                         {/* ── Section 1: Personal Information ── */}
-                        <Text style={s.sectionTitle}>Personal Information</Text>
+                        <ThemedText color="muted" weight="semiBold" size="sm" style={s.sectionTitle}>Personal Information</ThemedText>
 
-                        <Text style={s.label}>Full Name <Text style={s.required}>*</Text></Text>
+                        <ThemedText color="secondary" weight="medium" size="sm" style={s.label}>Full Name <ThemedText color="brand" weight="medium" size="sm" style={{ color: "#EF4444" }}>*</ThemedText></ThemedText>
                         <TextInput
-                            style={s.input}
+                            style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={fullName}
                             onChangeText={setFullName}
                             placeholder="Enter full name"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                         />
 
-                        <Text style={s.label}>Phone Number <Text style={s.required}>*</Text></Text>
+                        <ThemedText color="secondary" weight="medium" size="sm" style={s.label}>Phone Number <ThemedText color="brand" weight="medium" size="sm" style={{ color: "#EF4444" }}>*</ThemedText></ThemedText>
                         <TextInput
-                            style={s.input}
+                            style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={phone}
                             onChangeText={setPhone}
                             placeholder="+91 98765 43210"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                             keyboardType="phone-pad"
                         />
 
-                        <Text style={s.label}>Date of Birth <Text style={s.required}>*</Text></Text>
+                        <ThemedText color="secondary" weight="medium" size="sm" style={s.label}>Date of Birth <ThemedText color="brand" weight="medium" size="sm" style={{ color: "#EF4444" }}>*</ThemedText></ThemedText>
                         <TextInput
-                            style={s.input}
+                            style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={dateOfBirth}
                             onChangeText={setDateOfBirth}
                             placeholder="DD/MM/YYYY"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                         />
 
-                        <Text style={s.label}>Gender</Text>
+                        <ThemedText color="secondary" weight="medium" size="sm" style={s.label}>Gender</ThemedText>
                         <View style={s.chipRow}>
                             {GENDERS.map((g) => (
                                 <Pressable
                                     key={g}
-                                    style={[s.chip, gender === g && s.chipActive]}
+                                    style={[s.chip, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderLight }, gender === g && [s.chipActive, { backgroundColor: colors.primary, borderColor: colors.primary }]]}
                                     onPress={() => setGender(gender === g ? '' : g)}
                                 >
-                                    <Text style={[s.chipText, gender === g && s.chipTextActive]}>{g}</Text>
+                                    <ThemedText weight="medium" size="sm" style={[s.chipText, { color: colors.textSecondary }, gender === g && s.chipTextActive]}>{g}</ThemedText>
                                 </Pressable>
                             ))}
                         </View>
 
-                        <Text style={s.label}>Aadhar Card Number</Text>
+                        <ThemedText color="secondary" weight="medium" size="sm" style={s.label}>Aadhar Card Number</ThemedText>
                         <TextInput
-                            style={s.input}
+                            style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={aadharNumber}
                             onChangeText={(t) => setAadharNumber(formatAadhar(t))}
                             placeholder="XXXX XXXX XXXX"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                             keyboardType="numeric"
                             maxLength={14}
                         />
 
-                        <Text style={s.label}>Blood Group</Text>
+                        <ThemedText color="secondary" weight="medium" size="sm" style={s.label}>Blood Group</ThemedText>
                         <View style={s.chipRow}>
                             {BLOOD_GROUPS.map((bg) => (
                                 <Pressable
                                     key={bg}
-                                    style={[s.chipSmall, bloodGroup === bg && s.chipActive]}
+                                    style={[s.chipSmall, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderLight }, bloodGroup === bg && [s.chipActive, { backgroundColor: colors.primary, borderColor: colors.primary }]]}
                                     onPress={() => setBloodGroup(bloodGroup === bg ? '' : bg)}
                                 >
-                                    <Text style={[s.chipText, bloodGroup === bg && s.chipTextActive]}>{bg}</Text>
+                                    <ThemedText weight="medium" size="sm" style={[s.chipText, { color: colors.textSecondary }, bloodGroup === bg && s.chipTextActive]}>{bg}</ThemedText>
                                 </Pressable>
                             ))}
                         </View>
 
-                        <Text style={s.label}>Address</Text>
+                        <ThemedText color="secondary" weight="medium" size="sm" style={s.label}>Address</ThemedText>
                         <TextInput
-                            style={[s.input, s.textArea]}
+                            style={[s.input, s.textArea, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={address}
                             onChangeText={setAddress}
                             placeholder="Enter full address"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                             multiline
                             numberOfLines={2}
                             textAlignVertical="top"
                         />
 
                         {/* ── Section 2: Emergency Contact ── */}
-                        <Text style={[s.sectionTitle, { marginTop: spacing['3xl'] }]}>Emergency Contact</Text>
+                        <ThemedText color="muted" weight="semiBold" size="sm" style={[s.sectionTitle, { marginTop: spacing['3xl'] }]}>Emergency Contact</ThemedText>
 
-                        <Text style={s.label}>Contact Name</Text>
+                        <ThemedText color="secondary" weight="medium" size="sm" style={s.label}>Contact Name</ThemedText>
                         <TextInput
-                            style={s.input}
+                            style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={emergencyName}
                             onChangeText={setEmergencyName}
                             placeholder="Emergency contact name"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                         />
 
-                        <Text style={s.label}>Contact Phone</Text>
+                        <ThemedText color="secondary" weight="medium" size="sm" style={s.label}>Contact Phone</ThemedText>
                         <TextInput
-                            style={s.input}
+                            style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={emergencyPhone}
                             onChangeText={setEmergencyPhone}
                             placeholder="+91 98765 43210"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                             keyboardType="phone-pad"
                         />
 
                         {/* ── Section 3: Medical History ── */}
-                        <Text style={[s.sectionTitle, { marginTop: spacing['3xl'] }]}>Medical History</Text>
+                        <ThemedText color="muted" weight="semiBold" size="sm" style={[s.sectionTitle, { marginTop: spacing['3xl'] }]}>Medical History</ThemedText>
 
-                        <Text style={s.label}>Known Allergies</Text>
+                        <ThemedText color="secondary" weight="medium" size="sm" style={s.label}>Known Allergies</ThemedText>
                         <TextInput
-                            style={[s.input, s.textArea]}
+                            style={[s.input, s.textArea, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={allergies}
                             onChangeText={setAllergies}
                             placeholder="List any known allergies (medications, food, etc.)"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                             multiline
                             numberOfLines={2}
                             textAlignVertical="top"
                         />
 
-                        <Text style={s.label}>Existing Medical Conditions</Text>
+                        <ThemedText color="secondary" weight="medium" size="sm" style={s.label}>Existing Medical Conditions</ThemedText>
                         <TextInput
-                            style={[s.input, s.textArea]}
+                            style={[s.input, s.textArea, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={existingConditions}
                             onChangeText={setExistingConditions}
                             placeholder="List any existing medical conditions"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                             multiline
                             numberOfLines={2}
                             textAlignVertical="top"
@@ -277,16 +278,17 @@ export default function AddPatientModal({ visible, onClose, onPatientAdded }: Ad
                     </ScrollView>
 
                     {/* Footer */}
-                    <View style={s.footer}>
+                    <View style={[s.footer, { borderTopColor: colors.borderLight, backgroundColor: colors.surface }]}>
                         <Pressable
-                            style={({ pressed }) => [s.cancelBtn, pressed && { opacity: 0.7 }]}
+                            style={({ pressed }) => [s.cancelBtn, { borderColor: colors.border }, pressed && { opacity: 0.7 }]}
                             onPress={onClose}
                         >
-                            <Text style={s.cancelBtnText}>Cancel</Text>
+                            <ThemedText color="secondary" weight="medium" size="base" style={s.cancelBtnText}>Cancel</ThemedText>
                         </Pressable>
                         <Pressable
                             style={({ pressed }) => [
                                 s.submitBtn,
+                                { backgroundColor: colors.primary },
                                 (!canSubmit || isSubmitting) && { opacity: 0.5 },
                                 pressed && { opacity: 0.85 },
                             ]}
@@ -298,7 +300,7 @@ export default function AddPatientModal({ visible, onClose, onPatientAdded }: Ad
                             ) : (
                                 <>
                                     <Feather name="user-plus" size={16} color="#fff" />
-                                    <Text style={s.submitBtnText}>Register Patient</Text>
+                                    <ThemedText weight="semiBold" size="base" style={s.submitBtnText}>Register Patient</ThemedText>
                                 </>
                             )}
                         </Pressable>
@@ -331,13 +333,12 @@ const s = StyleSheet.create({
         left: 0,
         right: 0,
         height: SCREEN_HEIGHT * 0.85,
-        backgroundColor: doctorColors.surface,
         borderTopLeftRadius: radii.xl,
         borderTopRightRadius: radii.xl,
         ...shadows.elevated,
     },
     handleRow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
-    handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: doctorColors.border },
+    handle: { width: 40, height: 4, borderRadius: 2 },
     header: {
         flexDirection: 'row',
         alignItems: 'flex-start',
@@ -347,14 +348,8 @@ const s = StyleSheet.create({
         gap: spacing.md,
     },
     headerTitle: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size.xl,
-        color: doctorColors.textPrimary,
     },
     headerSub: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
         marginTop: spacing.xxs,
     },
 
@@ -362,30 +357,19 @@ const s = StyleSheet.create({
     scrollInner: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
 
     sectionTitle: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
         textTransform: 'uppercase',
         letterSpacing: 1,
         marginBottom: spacing.lg,
     },
     label: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
         marginBottom: spacing.sm,
     },
-    required: { color: '#EF4444' },
+    required: { },
     input: {
         borderWidth: 1,
-        borderColor: '#E2E8F0',
         borderRadius: radii.md,
-        backgroundColor: '#F8FAFC',
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.md,
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
         marginBottom: spacing.lg,
     },
     textArea: {
@@ -404,28 +388,19 @@ const s = StyleSheet.create({
         paddingHorizontal: spacing.lg,
         borderRadius: radii.md,
         borderWidth: 1,
-        borderColor: '#E2E8F0',
-        backgroundColor: '#F8FAFC',
     },
     chipSmall: {
         paddingVertical: spacing.sm,
         paddingHorizontal: spacing.md,
         borderRadius: radii.md,
         borderWidth: 1,
-        borderColor: '#E2E8F0',
-        backgroundColor: '#F8FAFC',
     },
     chipActive: {
-        borderColor: doctorColors.primary,
-        backgroundColor: doctorColors.primary + '12',
+        borderWidth: 1,
     },
     chipText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.textSecondary,
     },
     chipTextActive: {
-        color: doctorColors.primary,
     },
 
     footer: {
@@ -434,7 +409,6 @@ const s = StyleSheet.create({
         paddingHorizontal: spacing.xl,
         paddingVertical: spacing.lg,
         borderTopWidth: 1,
-        borderTopColor: doctorColors.borderLight,
     },
     cancelBtn: {
         flex: 1,
@@ -443,12 +417,8 @@ const s = StyleSheet.create({
         paddingVertical: spacing.md,
         borderRadius: radii.md,
         borderWidth: 1,
-        borderColor: doctorColors.border,
     },
     cancelBtnText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.base,
-        color: doctorColors.textSecondary,
     },
     submitBtn: {
         flex: 1,
@@ -458,11 +428,8 @@ const s = StyleSheet.create({
         gap: spacing.sm,
         paddingVertical: spacing.md,
         borderRadius: radii.md,
-        backgroundColor: doctorColors.primary,
     },
     submitBtnText: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
         color: '#FFFFFF',
     },
 });

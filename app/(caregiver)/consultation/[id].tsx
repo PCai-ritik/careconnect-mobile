@@ -28,12 +28,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
-    patientColors,
     spacing,
     typography,
     radii,
     shadows,
 } from '@/constants/theme';
+import { useTheme } from '@/providers/ThemeProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { getJoinToken, getMyAppointments } from '@/services/caregiver';
 import { Camera } from 'expo-camera';
@@ -91,6 +91,9 @@ export default function ConsultationScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
     const { token } = useAuth();
+    const { colors } = useTheme();
+    const styles = useStyles(colors);
+    const statusStyles = useStatusStyles(colors);
 
     const [hasPermissions, setHasPermissions] = useState(false);
     const [audioReady, setAudioReady] = useState(false);
@@ -312,7 +315,7 @@ export default function ConsultationScreen() {
     if (!hasPermissions) {
         return (
             <View style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}>
-                <ActivityIndicator size="large" color={patientColors.primary} />
+                <ActivityIndicator size="large" color={colors.primary} />
                 <Text style={{ color: VC.text, marginTop: 10 }}>Requesting camera access...</Text>
             </View>
         );
@@ -321,7 +324,7 @@ export default function ConsultationScreen() {
     if (!hasPermissions || !audioReady) {
         return (
             <View style={[styles.root, { alignItems: 'center', justifyContent: 'center' }]}>
-                <ActivityIndicator size="large" color={patientColors.primary} />
+                <ActivityIndicator size="large" color={colors.primary} />
                 <Text style={{ color: VC.text, marginTop: 10 }}>
                     {!hasPermissions ? 'Requesting permissions...' : 'Initializing audio hardware...'}
                 </Text>
@@ -347,6 +350,9 @@ export default function ConsultationScreen() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function RemoteVideoView({ doctorName }: { doctorName: string }) {
+    const { colors } = useTheme();
+    const styles = useStyles(colors);
+    const statusStyles = useStatusStyles(colors);
     const tracks = useTracks(
         [{ source: Track.Source.Camera, withPlaceholder: true }],
         { onlySubscribed: true }
@@ -409,6 +415,9 @@ function RemoteVideoView({ doctorName }: { doctorName: string }) {
 }
 
 function LocalPiPView({ isCameraOn, isMicOn }: { isCameraOn: boolean; isMicOn: boolean }) {
+    const { colors } = useTheme();
+    const styles = useStyles(colors);
+    const statusStyles = useStatusStyles(colors);
     const tracks = useTracks(
         [{ source: Track.Source.Camera, withPlaceholder: true }],
         { onlySubscribed: false }
@@ -451,6 +460,8 @@ function LocalPiPView({ isCameraOn, isMicOn }: { isCameraOn: boolean; isMicOn: b
 }
 
 function MicControl({ isMicOn, setIsMicOn, hasToken }: { isMicOn: boolean; setIsMicOn: (v: boolean) => void; hasToken: boolean }) {
+    const { colors } = useTheme();
+    const styles = useStyles(colors);
     const lp = hasToken ? useLocalParticipant() : null;
     const toggle = useCallback(async () => {
         const next = !isMicOn;
@@ -475,6 +486,8 @@ function MicControl({ isMicOn, setIsMicOn, hasToken }: { isMicOn: boolean; setIs
 }
 
 function CameraControl({ isCameraOn, setIsCameraOn, hasToken }: { isCameraOn: boolean; setIsCameraOn: (v: boolean) => void; hasToken: boolean }) {
+    const { colors } = useTheme();
+    const styles = useStyles(colors);
     const lp = hasToken ? useLocalParticipant() : null;
     const toggle = useCallback(async () => {
         const next = !isCameraOn;
@@ -500,7 +513,7 @@ function CameraControl({ isCameraOn, setIsCameraOn, hasToken }: { isCameraOn: bo
 
 // ─── Main Styles ────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const useStyles = (colors: any) => StyleSheet.create({
     root: {
         flex: 1,
         backgroundColor: VC.bg,
@@ -659,7 +672,7 @@ const styles = StyleSheet.create({
 
 // ─── Status Indicator Styles ────────────────────────────────────────────────
 
-const statusStyles = StyleSheet.create({
+const useStatusStyles = (colors: any) => StyleSheet.create({
     remoteMicBadge: {
         position: 'absolute',
         top: 12,
@@ -688,14 +701,14 @@ const statusStyles = StyleSheet.create({
 
 // ─── Notes Sheet Styles ─────────────────────────────────────────────────────
 
-const ns = StyleSheet.create({
+const useNs = (colors: any) => StyleSheet.create({
     topHalf: {
         flex: 1,
         backgroundColor: 'transparent',
     },
     sheet: {
         height: NOTES_SHEET_HEIGHT,
-        backgroundColor: patientColors.surface,
+        backgroundColor: colors.surface,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         paddingHorizontal: spacing.lg,
@@ -705,7 +718,7 @@ const ns = StyleSheet.create({
         width: 40,
         height: 4,
         borderRadius: 2,
-        backgroundColor: patientColors.border,
+        backgroundColor: colors.border,
         alignSelf: 'center',
         marginTop: spacing.sm,
         marginBottom: spacing.md,
@@ -719,24 +732,24 @@ const ns = StyleSheet.create({
     title: {
         fontFamily: typography.fontFamily.semiBold,
         ...typography.size.lg,
-        color: patientColors.textPrimary,
+        color: colors.textPrimary,
     },
     closeBtn: {
         width: 36,
         height: 36,
         borderRadius: radii.full,
-        backgroundColor: patientColors.surfaceMuted,
+        backgroundColor: colors.surfaceMuted,
         alignItems: 'center',
         justifyContent: 'center',
     },
     input: {
         flex: 1,
-        backgroundColor: patientColors.surfaceMuted,
+        backgroundColor: colors.surfaceMuted,
         borderRadius: radii.md,
         padding: spacing.md,
         fontFamily: typography.fontFamily.regular,
         ...typography.size.base,
-        color: patientColors.textPrimary,
+        color: colors.textPrimary,
         marginBottom: spacing.md,
     },
     saveBtn: {
@@ -744,7 +757,7 @@ const ns = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: spacing.sm,
-        backgroundColor: patientColors.primary,
+        backgroundColor: colors.primary,
         paddingVertical: spacing.md,
         borderRadius: radii.md,
         marginBottom: spacing.xl,

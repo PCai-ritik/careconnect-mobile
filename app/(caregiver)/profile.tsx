@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 import {
-    View,
-    Text,
     Pressable,
     ScrollView,
     TextInput,
@@ -12,21 +10,33 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import {
-    patientColors,
     spacing,
     typography,
     radii,
 } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
-import { getMe } from '@/services/caregiver';
+import { getMe, getHospitals } from '@/services/caregiver';
+import type { MeResponse, HospitalListItem } from '@/services/types';
 import PatientThemedAlert from '@/components/patient/PatientThemedAlert';
+import HospitalAffiliationModal from '@/components/patient/HospitalAffiliationModal';
+import { useTheme } from '@/providers/ThemeProvider';
+import { ThemedView, ThemedText } from '@/components/shared/Themed';
+
 
 export default function ProfileScreen() {
     const router = useRouter();
     const { token, logout } = useAuth();
+    const { colors, refreshBranding } = useTheme();
+    const styles = useStyles(colors);
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(true);
+
+    // Affiliation states
+    const [me, setMe] = useState<MeResponse | null>(null);
+    const [hospitals, setHospitals] = useState<HospitalListItem[]>([]);
+    const [isAffiliationOpen, setIsAffiliationOpen] = useState(false);
+    const [refreshKey, setRefreshKey] = useState(0);
 
     // Modal states
     const [showSaveSuccess, setShowSaveSuccess] = useState(false);
@@ -35,14 +45,20 @@ export default function ProfileScreen() {
     // Fetch real profile on mount
     useEffect(() => {
         if (!token) return;
-        getMe(token)
-            .then((me) => {
-                setName(me.full_name);
-                setEmail(me.email);
+        setLoading(true);
+        Promise.all([
+            getMe(token),
+            getHospitals()
+        ])
+            .then(([meData, hospList]) => {
+                setMe(meData);
+                setName(meData.full_name);
+                setEmail(meData.email);
+                setHospitals(hospList);
             })
-            .catch(() => { /* keep blank defaults */ })
+            .catch((e) => console.error('Failed to load caregiver profile data:', e))
             .finally(() => setLoading(false));
-    }, [token]);
+    }, [token, refreshKey]);
 
     const handleSave = () => {
         // TODO: Wire to PATCH /auth/me once backend route exists
@@ -52,7 +68,7 @@ export default function ProfileScreen() {
     if (loading) {
         return (
             <SafeAreaView style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
-                <ActivityIndicator size="large" color={patientColors.primary} />
+                <ActivityIndicator size="large" color={colors.primary} />
             </SafeAreaView>
         );
     }
@@ -60,51 +76,75 @@ export default function ProfileScreen() {
     return (
         <SafeAreaView style={styles.container}>
             {/* ── Header ── */}
-            <View style={styles.header}>
+            <ThemedView style={styles.header}>
                 <Pressable
                     style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
                     onPress={() => router.back()}
                 >
-                    <Feather name="chevron-left" size={22} color={patientColors.textPrimary} />
+                    <Feather name="chevron-left" size={22} color={colors.textPrimary} />
                 </Pressable>
-                <Text style={styles.headerTitle}>Your Profile</Text>
-                <View style={{ width: 40 }} />
-            </View>
+                <ThemedText weight="semiBold" size="lg" style={styles.headerTitle}>Your Profile</ThemedText>
+                <ThemedView style={{ width: 40 }} />
+            </ThemedView>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* ── Avatar ── */}
-                <View style={styles.avatarSection}>
-                    <View style={[styles.avatarCircle, { backgroundColor: getAvatarColor(name || 'User') }]}>
+                <ThemedView style={styles.avatarSection}>
+                    <ThemedView style={[styles.avatarCircle, { backgroundColor: getAvatarColor(name || 'User') }]}>
                         <Feather name="user" size={40} color="#374151" />
-                    </View>
+                    </ThemedView>
                     <Pressable style={({ pressed }) => [styles.changePicBtn, pressed && { opacity: 0.8 }]}>
-                        <Feather name="camera" size={16} color={patientColors.primary} />
-                        <Text style={styles.changePicText}>Change Picture</Text>
+                        <Feather name="camera" size={16} color={colors.primary} />
+                        <ThemedText weight="medium" size="sm" color="brand" style={styles.changePicText}>Change Picture</ThemedText>
                     </Pressable>
-                </View>
+                </ThemedView>
 
                 {/* ── Form ── */}
-                <View style={styles.formSection}>
-                    <Text style={styles.fieldLabel}>Full Name</Text>
+                <ThemedView style={styles.formSection}>
+                    <ThemedText weight="semiBold" size="sm" color="secondary" style={styles.fieldLabel}>Full Name</ThemedText>
                     <TextInput
                         style={styles.input}
                         value={name}
                         onChangeText={setName}
                         placeholder="Your name"
-                        placeholderTextColor={patientColors.textMuted}
+                        placeholderTextColor={colors.textMuted}
                     />
 
-                    <Text style={styles.fieldLabel}>Email</Text>
+                    <ThemedText weight="semiBold" size="sm" color="secondary" style={styles.fieldLabel}>Email</ThemedText>
                     <TextInput
                         style={styles.input}
                         value={email}
                         onChangeText={setEmail}
                         placeholder="Your email"
-                        placeholderTextColor={patientColors.textMuted}
+                        placeholderTextColor={colors.textMuted}
                         keyboardType="email-address"
                         autoCapitalize="none"
                     />
-                </View>
+
+                    <ThemedText weight="semiBold" size="sm" color="secondary" style={styles.fieldLabel}>Hospital Affiliation</ThemedText>
+                    <Pressable
+                        style={({ pressed }) => [
+                            styles.affiliationRow,
+                            pressed && { opacity: 0.7 }
+                        ]}
+                        onPress={() => setIsAffiliationOpen(true)}
+                    >
+                        <ThemedView style={styles.affiliationRowLeft}>
+                            <Feather name="activity" size={18} color={colors.primary} />
+                            <ThemedView style={styles.affiliationInfo}>
+                                <ThemedText weight="medium" style={styles.affiliationTitle}>
+                                    {me?.affiliation_status === 'PENDING'
+                                        ? 'Affiliation request pending'
+                                        : me?.affiliation_status === 'REJECTED'
+                                        ? 'Affiliation request rejected'
+                                        : hospitals.find((h) => h.id === me?.hospital_id)?.name ?? 'Default Hospital'}
+                                </ThemedText>
+                                <ThemedText size="xs" color="muted" style={styles.affiliationSubtitle}>Tap to manage affiliation</ThemedText>
+                            </ThemedView>
+                        </ThemedView>
+                        <Feather name="chevron-right" size={18} color={colors.textMuted} />
+                    </Pressable>
+                </ThemedView>
 
                 {/* ── Save ── */}
                 <Pressable
@@ -112,7 +152,7 @@ export default function ProfileScreen() {
                     onPress={handleSave}
                 >
                     <Feather name="check" size={18} color="#FFFFFF" />
-                    <Text style={styles.saveBtnText}>Save Changes</Text>
+                    <ThemedText weight="semiBold" style={styles.saveBtnText}>Save Changes</ThemedText>
                 </Pressable>
 
                 {/* ── Logout ── */}
@@ -121,7 +161,7 @@ export default function ProfileScreen() {
                     onPress={() => setShowLogoutAlert(true)}
                 >
                     <Feather name="log-out" size={18} color="#EF4444" />
-                    <Text style={styles.logoutBtnText}>Log Out</Text>
+                    <ThemedText weight="semiBold" style={styles.logoutBtnText}>Log Out</ThemedText>
                 </Pressable>
             </ScrollView>
 
@@ -154,6 +194,18 @@ export default function ProfileScreen() {
                 }}
                 onCancel={() => setShowLogoutAlert(false)}
             />
+
+            {/* ── Hospital Affiliation Modal ── */}
+            <HospitalAffiliationModal
+                visible={isAffiliationOpen}
+                onClose={() => setIsAffiliationOpen(false)}
+                me={me}
+                hospitals={hospitals}
+                onSaved={() => {
+                    setRefreshKey((k) => k + 1);
+                    refreshBranding?.();
+                }}
+            />
         </SafeAreaView>
     );
 }
@@ -174,8 +226,8 @@ const getAvatarColor = (name: string): string => {
     return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 };
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: patientColors.background },
+const useStyles = (colors: any) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
 
     // Header
     header: {
@@ -184,11 +236,9 @@ const styles = StyleSheet.create({
     },
     backBtn: {
         width: 40, height: 40, borderRadius: radii.full,
-        backgroundColor: patientColors.surfaceMuted, alignItems: 'center', justifyContent: 'center',
+        backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center',
     },
     headerTitle: {
-        fontFamily: typography.fontFamily.semiBold, ...typography.size.lg,
-        color: patientColors.textPrimary,
     },
 
     scrollContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing['3xl'] },
@@ -203,34 +253,58 @@ const styles = StyleSheet.create({
     changePicBtn: {
         flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
         paddingVertical: spacing.sm, paddingHorizontal: spacing.lg,
-        borderRadius: radii.full, borderWidth: 1.5, borderColor: patientColors.primary,
+        borderRadius: radii.full, borderWidth: 1.5, borderColor: colors.primary,
     },
     changePicText: {
-        fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: patientColors.primary,
     },
 
     // Form
     formSection: { marginBottom: spacing.xl },
     fieldLabel: {
-        fontFamily: typography.fontFamily.semiBold, ...typography.size.sm,
-        color: patientColors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5,
+        textTransform: 'uppercase', letterSpacing: 0.5,
         marginBottom: spacing.sm, marginTop: spacing.lg,
     },
     input: {
-        backgroundColor: patientColors.surfaceMuted, borderRadius: radii.md,
+        backgroundColor: colors.surfaceMuted, borderRadius: radii.md,
         padding: spacing.md, fontFamily: typography.fontFamily.regular,
-        ...typography.size.base, color: patientColors.textPrimary,
-        borderWidth: 1, borderColor: patientColors.borderLight,
+        ...typography.size.base, color: colors.textPrimary,
+        borderWidth: 1, borderColor: colors.borderLight,
+    },
+
+    // Affiliation Row style
+    affiliationRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: colors.surfaceMuted,
+        borderRadius: radii.md,
+        padding: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.borderLight,
+    },
+    affiliationRowLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.md,
+        flex: 1,
+    },
+    affiliationInfo: {
+        flex: 1,
+        gap: 2,
+    },
+    affiliationTitle: {
+    },
+    affiliationSubtitle: {
     },
 
     // Save
     saveBtn: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        gap: spacing.sm, backgroundColor: patientColors.primary,
+        gap: spacing.sm, backgroundColor: colors.primary,
         paddingVertical: spacing.md, borderRadius: radii.md, marginBottom: spacing.lg,
     },
     saveBtnText: {
-        fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: '#FFFFFF',
+        color: '#FFFFFF',
     },
 
     // Logout
@@ -240,6 +314,6 @@ const styles = StyleSheet.create({
         borderWidth: 1.5, borderColor: '#EF4444', backgroundColor: '#FEF2F2',
     },
     logoutBtnText: {
-        fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: '#EF4444',
+        color: '#EF4444',
     },
 });

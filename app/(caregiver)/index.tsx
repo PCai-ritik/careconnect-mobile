@@ -20,9 +20,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import {
-    View,
-    Text,
-    Image,
     Pressable,
     ScrollView,
     Modal,
@@ -32,16 +29,18 @@ import {
     Linking,
     Alert,
     RefreshControl,
+    Image,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import {
-    patientColors,
     spacing,
     typography,
     radii,
     shadows,
+    getBranding,
 } from '@/constants/theme';
+import { useTheme } from '@/providers/ThemeProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { getMyAppointments, getDoctorsByHospital, getPatientRecords, getLinkedPatients, bookAppointment, addPatient, updatePatient, getJoinToken } from '@/services/caregiver';
 import type { DoctorProfile, Appointment, MedicalRecord, PatientProfile } from '@/services/types';
@@ -50,6 +49,7 @@ import PatientThemedAlert from '@/components/patient/PatientThemedAlert';
 import AddPatientSheet from '@/components/caregiver/AddPatientSheet';
 import PatientChartSheet from '@/components/caregiver/PatientChartSheet';
 import SmartJoinButton from '@/components/SmartJoinButton';
+import { ThemedView, ThemedText } from '@/components/shared/Themed';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.85;
@@ -72,7 +72,7 @@ const SPECIALTY_MAP: Record<string, { icon: FeatherIcon; color: string }> = {
     'ENT (Otolaryngology)': { icon: 'headphones', color: '#14B8A6' }, // teal
 };
 
-const DEFAULT_SPEC = { icon: 'plus-circle' as FeatherIcon, color: patientColors.primary };
+const DEFAULT_SPEC = { icon: 'plus-circle' as FeatherIcon, color: '#3B82F6' }; // Default color
 
 function getSpecMeta(spec: string) {
     return SPECIALTY_MAP[spec] ?? DEFAULT_SPEC;
@@ -188,6 +188,9 @@ export default function CaregiverDashboardScreen() {
     const router = useRouter();
     const { user, token, logout } = useAuth();
     const insets = useSafeAreaInsets();
+    const { colors } = useTheme();
+    const styles = useStyles(colors);
+    const ms = useMs(colors);
 
     // -- API data --
     const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -423,8 +426,8 @@ export default function CaregiverDashboardScreen() {
     // ── Step renderers ──
 
     const renderStep1 = () => (
-        <View style={ms.stepBody}>
-            <View style={ms.specGrid}>
+        <ThemedView style={ms.stepBody}>
+            <ThemedView style={ms.specGrid}>
                 {specialties.map((spec) => {
                     const meta = getSpecMeta(spec);
                     return (
@@ -433,21 +436,21 @@ export default function CaregiverDashboardScreen() {
                             style={({ pressed }) => [ms.specCard, pressed && { opacity: 0.8 }]}
                             onPress={() => handleSpecialtySelect(spec)}
                         >
-                            <View style={[ms.specIconCircle, { backgroundColor: meta.color + '18' }]}>
+                            <ThemedView style={[ms.specIconCircle, { backgroundColor: meta.color + '18' }]}>
                                 <Feather name={meta.icon} size={22} color={meta.color} />
-                            </View>
-                            <Text style={ms.specName}>{spec}</Text>
+                            </ThemedView>
+                            <ThemedText weight="medium" size="sm" style={ms.specName}>{spec}</ThemedText>
                         </Pressable>
                     );
                 })}
-            </View>
-        </View>
+            </ThemedView>
+        </ThemedView>
     );
 
     const renderStep2 = () => (
-        <View style={ms.stepBody}>
+        <ThemedView style={ms.stepBody}>
             {filteredDoctors.length === 0 ? (
-                <Text style={ms.emptyText}>No doctors available for this specialty.</Text>
+                <ThemedText size="sm" color="muted" style={ms.emptyText}>No doctors available for this specialty.</ThemedText>
             ) : (
                 filteredDoctors.map((doc) => {
                     const meta = getSpecMeta(doc.specialization);
@@ -457,52 +460,52 @@ export default function CaregiverDashboardScreen() {
                             style={({ pressed }) => [ms.doctorCard, pressed && { opacity: 0.85 }]}
                             onPress={() => handleDoctorSelect(doc.id)}
                         >
-                            <View style={[ms.doctorAvatar, { backgroundColor: getAvatarColor(doc.full_name) }]}>
+                            <ThemedView style={[ms.doctorAvatar, { backgroundColor: getAvatarColor(doc.full_name) }]}>
                                 <Feather name="user" size={20} color="#374151" />
-                            </View>
-                            <View style={ms.doctorInfo}>
-                                <Text style={ms.doctorName}>{doc.full_name}</Text>
-                                <Text style={ms.doctorMeta}>
+                            </ThemedView>
+                            <ThemedView style={ms.doctorInfo}>
+                                <ThemedText weight="semiBold" size="base" style={ms.doctorName}>{doc.full_name}</ThemedText>
+                                <ThemedText size="sm" color="muted" style={ms.doctorMeta}>
                                     {doc.years_of_experience ?? ''}  •  {doc.hospital_affiliation ?? ''}
-                                </Text>
-                                <Text style={ms.doctorFee}>
+                                </ThemedText>
+                                <ThemedText weight="medium" size="sm" color="primary" style={ms.doctorFee}>
                                     {currencySymbol(doc.currency)}{doc.consultation_fee ?? 0} / {doc.consultation_duration_minutes ?? 30} min
-                                </Text>
-                            </View>
-                            <Feather name="chevron-right" size={18} color={patientColors.textMuted} />
+                                </ThemedText>
+                            </ThemedView>
+                            <Feather name="chevron-right" size={18} color={colors.textMuted} />
                         </Pressable>
                     );
                 })
             )}
-        </View>
+        </ThemedView>
     );
 
     const renderStep3 = () => {
         return (
-            <View style={ms.stepBody}>
+            <ThemedView style={ms.stepBody}>
                 {/* Month header with nav arrows */}
-                <View style={ms.calHeader}>
+                <ThemedView style={ms.calHeader}>
                     <Pressable onPress={goPrevMonth} disabled={!canGoPrev} style={({ pressed }) => [ms.calNav, !canGoPrev && { opacity: 0.3 }, pressed && { opacity: 0.6 }]}>
-                        <Feather name="chevron-left" size={20} color={patientColors.textPrimary} />
+                        <Feather name="chevron-left" size={20} color={colors.textPrimary} />
                     </Pressable>
-                    <Text style={ms.calMonthTitle}>{MONTH_NAMES[calMonth]} {calYear}</Text>
+                    <ThemedText weight="semiBold" size="lg" style={ms.calMonthTitle}>{MONTH_NAMES[calMonth]} {calYear}</ThemedText>
                     <Pressable onPress={goNextMonth} disabled={!canGoNext} style={({ pressed }) => [ms.calNav, !canGoNext && { opacity: 0.3 }, pressed && { opacity: 0.6 }]}>
-                        <Feather name="chevron-right" size={20} color={patientColors.textPrimary} />
+                        <Feather name="chevron-right" size={20} color={colors.textPrimary} />
                     </Pressable>
-                </View>
+                </ThemedView>
 
                 {/* Day-of-week header */}
-                <View style={ms.calDowRow}>
+                <ThemedView style={ms.calDowRow}>
                     {DAY_HDR.map((d) => (
-                        <Text key={d} style={ms.calDowText}>{d}</Text>
+                        <ThemedText weight="medium" size="sm" color="muted" key={d} style={ms.calDowText}>{d}</ThemedText>
                     ))}
-                </View>
+                </ThemedView>
 
                 {/* Calendar grid */}
                 {monthGrid.map((week, wi) => (
-                    <View key={wi} style={ms.calWeekRow}>
+                    <ThemedView key={wi} style={ms.calWeekRow}>
                         {week.map((cell, ci) => {
-                            if (!cell) return <View key={ci} style={ms.calCell} />;
+                            if (!cell) return <ThemedView key={ci} style={ms.calCell} />;
 
                             const past = isPast(cell);
                             const dayName = DAY_NAMES[cell.getDay()];
@@ -525,40 +528,40 @@ export default function CaregiverDashboardScreen() {
                                         disabled && ms.calCellDisabled,
                                     ]}
                                 >
-                                    <Text style={[
+                                    <ThemedText weight="regular" size="base" style={[
                                         ms.calCellText,
                                         today && !selected && ms.calCellTodayText,
                                         selected && ms.calCellSelectedText,
                                         disabled && ms.calCellDisabledText,
                                     ]}>
                                         {cell.getDate()}
-                                    </Text>
+                                    </ThemedText>
                                 </Pressable>
                             );
                         })}
-                    </View>
+                    </ThemedView>
                 ))}
 
                 {/* Time slots — 3-column symmetric grid */}
                 {selectedDate && (
                     <>
-                        <Text style={[ms.subLabel, { marginTop: spacing.xl }]}>Select a Time</Text>
+                        <ThemedText weight="semiBold" size="sm" color="secondary" style={[ms.subLabel, { marginTop: spacing.xl }]}>Select a Time</ThemedText>
                         {timeSlots.length === 0 ? (
-                            <Text style={ms.emptyText}>Doctor is unavailable on this date.</Text>
+                            <ThemedText size="sm" color="muted" style={ms.emptyText}>Doctor is unavailable on this date.</ThemedText>
                         ) : (
-                            <View style={ms.timeGrid}>
+                            <ThemedView style={ms.timeGrid}>
                                 {timeSlots.map((slot) => (
                                     <Pressable
                                         key={slot}
                                         onPress={() => setSelectedTime(slot)}
                                         style={[ms.timePill, selectedTime === slot && ms.timePillSelected]}
                                     >
-                                        <Text style={[ms.timePillText, selectedTime === slot && ms.timePillTextSelected]}>
+                                        <ThemedText weight="medium" size="sm" style={[ms.timePillText, selectedTime === slot && ms.timePillTextSelected]}>
                                             {slot}
-                                        </Text>
+                                        </ThemedText>
                                     </Pressable>
                                 ))}
-                            </View>
+                            </ThemedView>
                         )}
                     </>
                 )}
@@ -569,9 +572,9 @@ export default function CaregiverDashboardScreen() {
                     disabled={!selectedTime}
                     onPress={() => setBookingStep(4)}
                 >
-                    <Text style={[ms.continueText, !selectedTime && ms.continueTextDisabled]}>Continue</Text>
+                    <ThemedText weight="semiBold" size="base" style={[ms.continueText, !selectedTime && ms.continueTextDisabled]}>Continue</ThemedText>
                 </Pressable>
-            </View>
+            </ThemedView>
         );
     };
 
@@ -581,38 +584,38 @@ export default function CaregiverDashboardScreen() {
         const dateStr = `${DAY_HDR[selectedDate.getDay()]}, ${MONTH_ABBR[selectedDate.getMonth()]} ${selectedDate.getDate()}`;
 
         return (
-            <View style={ms.stepBody}>
+            <ThemedView style={ms.stepBody}>
                 {/* Booking summary */}
-                <View style={ms.summaryCard}>
-                    <Text style={ms.summaryTitle}>Booking Summary</Text>
+                <ThemedView style={ms.summaryCard}>
+                    <ThemedText weight="semiBold" size="lg" style={ms.summaryTitle}>Booking Summary</ThemedText>
                     {[
                         { label: 'Doctor', value: doc.full_name },
                         { label: 'Specialty', value: doc.specialization },
                         { label: 'Date & Time', value: `${dateStr} at ${selectedTime}` },
                         { label: 'Duration', value: `${doc.consultation_duration_minutes ?? 30} min` },
                     ].map((item) => (
-                        <View key={item.label} style={ms.summaryRow}>
-                            <View style={ms.summaryDotContainer}>
-                                <View style={ms.summaryDot} />
-                            </View>
-                            <View style={ms.summaryContent}>
-                                <Text style={ms.summaryLabel}>{item.label}</Text>
-                                <Text style={ms.summaryValue}>{item.value}</Text>
-                            </View>
-                        </View>
+                        <ThemedView key={item.label} style={ms.summaryRow}>
+                            <ThemedView style={ms.summaryDotContainer}>
+                                <ThemedView style={ms.summaryDot} />
+                            </ThemedView>
+                            <ThemedView style={ms.summaryContent}>
+                                <ThemedText size="sm" color="secondary" style={ms.summaryLabel}>{item.label}</ThemedText>
+                                <ThemedText weight="medium" size="base" style={ms.summaryValue}>{item.value}</ThemedText>
+                            </ThemedView>
+                        </ThemedView>
                     ))}
-                    <View style={ms.summaryDivider} />
-                    <View style={ms.summaryFeeRow}>
-                        <Text style={ms.summaryFeeLabel}>Consultation Fee</Text>
-                        <Text style={ms.summaryFeeValue}>
+                    <ThemedView style={ms.summaryDivider} />
+                    <ThemedView style={ms.summaryFeeRow}>
+                        <ThemedText weight="medium" size="base" style={ms.summaryFeeLabel}>Consultation Fee</ThemedText>
+                        <ThemedText weight="semiBold" size="lg" style={ms.summaryFeeValue}>
                             {currencySymbol(doc.currency)}{doc.consultation_fee ?? 0}
-                        </Text>
-                    </View>
-                </View>
+                        </ThemedText>
+                    </ThemedView>
+                </ThemedView>
 
                 {/* Payment method selection */}
-                <Text style={ms.subLabel}>Payment Method</Text>
-                <View style={ms.paymentGrid}>
+                <ThemedText weight="semiBold" size="sm" color="secondary" style={ms.subLabel}>Payment Method</ThemedText>
+                <ThemedView style={ms.paymentGrid}>
                     {doctorPaymentMethods.map((pm) => {
                         const isActive = selectedPayment === pm.id;
                         return (
@@ -621,19 +624,19 @@ export default function CaregiverDashboardScreen() {
                                 onPress={() => setSelectedPayment(pm.id)}
                                 style={[ms.paymentCard, isActive && ms.paymentCardActive]}
                             >
-                                <View style={[ms.paymentIcon, isActive && ms.paymentIconActive]}>
-                                    <Feather name={pm.icon} size={20} color={isActive ? '#FFFFFF' : patientColors.textSecondary} />
-                                </View>
-                                <Text style={[ms.paymentLabel, isActive && ms.paymentLabelActive]}>{pm.label}</Text>
+                                <ThemedView style={[ms.paymentIcon, isActive && ms.paymentIconActive]}>
+                                    <Feather name={pm.icon} size={20} color={isActive ? '#FFFFFF' : colors.textSecondary} />
+                                </ThemedView>
+                                <ThemedText weight="medium" size="base" style={[ms.paymentLabel, isActive && ms.paymentLabelActive]}>{pm.label}</ThemedText>
                                 {isActive && (
-                                    <View style={ms.paymentCheck}>
-                                        <Feather name="check" size={14} color={patientColors.primary} />
-                                    </View>
+                                    <ThemedView style={ms.paymentCheck}>
+                                        <Feather name="check" size={14} color={colors.primary} />
+                                    </ThemedView>
                                 )}
                             </Pressable>
                         );
                     })}
-                </View>
+                </ThemedView>
 
                 {/* Pay button */}
                 <Pressable
@@ -646,14 +649,14 @@ export default function CaregiverDashboardScreen() {
                     ) : (
                         <>
                             <Feather name="credit-card" size={18} color="#FFFFFF" />
-                            <Text style={ms.payButtonText}>Pay & Book Consultation</Text>
+                            <ThemedText weight="semiBold" size="base" style={ms.payButtonText}>Pay & Book Consultation</ThemedText>
                         </>
                     )}
                 </Pressable>
-                <Text style={ms.payNote}>
+                <ThemedText style={ms.payNote}>
                     You'll receive a confirmation with the video call link after payment.
-                </Text>
-            </View>
+                </ThemedText>
+            </ThemedView>
         );
     };
 
@@ -672,57 +675,64 @@ export default function CaregiverDashboardScreen() {
                 contentContainerStyle={styles.scrollContent} 
                 showsVerticalScrollIndicator={false}
                 refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={patientColors.primary} />
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
                 }
             >
                 {/* ── 1. Header ── */}
-                <View style={styles.header}>
-                    <View style={styles.headerLeft}>
-                        <Image
-                            source={require('@/assets/images/stethescope.png')}
-                            style={styles.logoImage}
-                        />
-                        <Text style={styles.brandText}>CareConnect</Text>
-                    </View>
+                <ThemedView style={styles.header}>
+                    <ThemedView style={styles.headerLeft}>
+                        {getBranding().logoUrl ? (
+                            <Image
+                                source={{ uri: getBranding().logoUrl as string }}
+                                style={styles.logoImage}
+                            />
+                        ) : (
+                            <Image
+                                source={require('@/assets/images/stethescope.png')}
+                                style={styles.logoImage}
+                            />
+                        )}
+                        <ThemedText weight="bold" size="xl" style={styles.brandText}>{getBranding().name || 'CareConnect'}</ThemedText>
+                    </ThemedView>
                     <Pressable style={styles.avatarWrapper} onPress={() => setIsProfileMenuOpen(true)}>
-                        <View style={[styles.avatar, { backgroundColor: getAvatarColor('Caregiver') }]}>
+                        <ThemedView style={[styles.avatar, { backgroundColor: getAvatarColor('Caregiver') }]}>
                             <Feather name="user" size={20} color="#374151" />
-                        </View>
-                        {hasNotifications && <View style={styles.notificationDot} />}
+                        </ThemedView>
+                        {hasNotifications && <ThemedView style={styles.notificationDot} />}
                     </Pressable>
-                </View>
+                </ThemedView>
 
                 {/* ── 2. Welcome ── */}
-                <View style={styles.welcomeSection}>
-                    <Text style={styles.greeting}>Welcome back</Text>
-                    <Text style={styles.subtitle}>Manage your health appointments and records</Text>
-                </View>
+                <ThemedView style={styles.welcomeSection}>
+                    <ThemedText weight="bold" size="2xl" style={styles.greeting}>Welcome back</ThemedText>
+                    <ThemedText color="secondary" style={styles.subtitle}>Manage your health appointments and records</ThemedText>
+                </ThemedView>
 
                 {/* ── 3. Next Up Card ── */}
                 {upcomingAppointment && (
-                    <View style={styles.nextUpCard}>
-                        <Text style={styles.nextUpLabel}>NEXT UP</Text>
-                        <View style={styles.nextUpBody}>
-                            <View style={styles.nextUpRow}>
-                                <View style={[styles.doctorAvatar, { backgroundColor: getAvatarColor(upcomingAppointment.doctor_id) }]}>
+                    <ThemedView style={styles.nextUpCard}>
+                        <ThemedText weight="semiBold" size="xs" style={styles.nextUpLabel}>NEXT UP</ThemedText>
+                        <ThemedView style={styles.nextUpBody}>
+                            <ThemedView style={styles.nextUpRow}>
+                                <ThemedView style={[styles.doctorAvatar, { backgroundColor: getAvatarColor(upcomingAppointment.doctor_id) }]}>
                                     <Feather name="user" size={20} color="#374151" />
-                                </View>
-                                <View style={styles.nextUpInfo}>
-                                    <Text style={styles.nextUpDoctor}>{doctors.find(d => d.id === upcomingAppointment.doctor_id)?.full_name ?? 'Doctor'}'s Appointment</Text>
-                                    <Text style={styles.nextUpSpec}>{upcomingAppointment.appointment_type}</Text>
-                                </View>
-                            </View>
-                            <View style={styles.nextUpTimeRow}>
-                                <Feather name="clock" size={14} color={patientColors.textMuted} />
-                                <Text style={styles.nextUpTime}>{new Date(upcomingAppointment.scheduled_time).toLocaleString()}</Text>
-                            </View>
-                        </View>
-                        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                                </ThemedView>
+                                <ThemedView style={styles.nextUpInfo}>
+                                    <ThemedText weight="semiBold" size="base" style={styles.nextUpDoctor}>{doctors.find(d => d.id === upcomingAppointment.doctor_id)?.full_name ?? 'Doctor'}'s Appointment</ThemedText>
+                                    <ThemedText size="sm" color="muted" style={styles.nextUpSpec}>{upcomingAppointment.appointment_type}</ThemedText>
+                                </ThemedView>
+                            </ThemedView>
+                            <ThemedView style={styles.nextUpTimeRow}>
+                                <Feather name="clock" size={14} color={colors.textMuted} />
+                                <ThemedText weight="medium" size="sm" style={styles.nextUpTime}>{new Date(upcomingAppointment.scheduled_time).toLocaleString()}</ThemedText>
+                            </ThemedView>
+                        </ThemedView>
+                        <ThemedView style={{ flexDirection: 'row', gap: spacing.sm }}>
                             {isProcessingSummary ? (
-                                <View style={[styles.nextUpJoinBtn, { backgroundColor: patientColors.primaryLight, flex: 1 }]}>
-                                    <ActivityIndicator size="small" color={patientColors.primary} style={{ marginRight: spacing.sm }} />
-                                    <Text style={[styles.nextUpJoinText, { color: patientColors.primaryDark }]}>Processing Summary...</Text>
-                                </View>
+                                <ThemedView style={[styles.nextUpJoinBtn, { backgroundColor: colors.primaryLight, flex: 1 }]}>
+                                    <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: spacing.sm }} />
+                                    <ThemedText weight="semiBold" size="sm" style={[styles.nextUpJoinText, { color: colors.primaryDark }]}>Processing Summary...</ThemedText>
+                                </ThemedView>
                             ) : (
                                 <>
                                     <Pressable
@@ -744,7 +754,7 @@ export default function CaregiverDashboardScreen() {
                                             }
                                         }}
                                     >
-                                        <Feather name="share-2" size={18} color={patientColors.primary} />
+                                        <Feather name="share-2" size={18} color={colors.primary} />
                                     </Pressable>
                                     <SmartJoinButton
                                         scheduledTime={upcomingAppointment.scheduled_time}
@@ -756,27 +766,27 @@ export default function CaregiverDashboardScreen() {
                                     />
                                 </>
                             )}
-                        </View>
-                    </View>
+                        </ThemedView>
+                    </ThemedView>
                 )}
 
                 {/* ── 4. Book CTA ── */}
                 <Pressable style={({ pressed }) => [styles.bookCta, pressed && { opacity: 0.85 }]}
                     onPress={openBookingWizard}>
-                    <View style={styles.bookCtaIconCircle}>
-                        <Feather name="plus" size={20} color={patientColors.primary} />
-                    </View>
-                    <View style={styles.bookCtaTextBlock}>
-                        <Text style={styles.bookCtaTitle}>Book New Consultation</Text>
-                        <Text style={styles.bookCtaSubtitle}>Find a specialist and schedule your visit</Text>
-                    </View>
-                    <Feather name="chevron-right" size={20} color={patientColors.primary} />
+                    <ThemedView style={styles.bookCtaIconCircle}>
+                        <Feather name="plus" size={20} color={colors.primary} />
+                    </ThemedView>
+                    <ThemedView style={styles.bookCtaTextBlock}>
+                        <ThemedText weight="semiBold" size="base" style={styles.bookCtaTitle}>Book New Consultation</ThemedText>
+                        <ThemedText size="sm" color="muted" style={styles.bookCtaSubtitle}>Find a specialist and schedule your visit</ThemedText>
+                    </ThemedView>
+                    <Feather name="chevron-right" size={20} color={colors.primary} />
                 </Pressable>
 
                 {/* ── 5. Patients Under Care ── */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Patients Under Care</Text>
-                </View>
+                <ThemedView style={styles.sectionHeader}>
+                    <ThemedText weight="semiBold" size="lg" style={styles.sectionTitle}>Patients Under Care</ThemedText>
+                </ThemedView>
                 {patients.length > 0 ? (
                     patients.map((pt) => {
                         const age = pt.date_of_birth
@@ -788,21 +798,21 @@ export default function CaregiverDashboardScreen() {
                                 style={({ pressed }) => [styles.patientCard, pressed && { opacity: 0.85 }]}
                                 onPress={() => { setSelectedPatient(pt); setIsPatientChartOpen(true); }}
                             >
-                                <View style={[styles.patientAvatar, { backgroundColor: getAvatarColor(pt.full_name) }]}>
-                                    <Text style={styles.patientAvatarText}>
+                                <ThemedView style={[styles.patientAvatar, { backgroundColor: getAvatarColor(pt.full_name) }]}>
+                                    <ThemedText weight="bold" size="lg" style={styles.patientAvatarText}>
                                         {pt.full_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                                    </Text>
-                                </View>
-                                <View style={styles.patientInfo}>
-                                    <Text style={styles.patientName} numberOfLines={1}>{pt.full_name}</Text>
-                                    <Text style={styles.patientMeta}>
+                                    </ThemedText>
+                                </ThemedView>
+                                <ThemedView style={styles.patientInfo}>
+                                    <ThemedText weight="semiBold" size="base" style={styles.patientName} numberOfLines={1}>{pt.full_name}</ThemedText>
+                                    <ThemedText size="sm" color="muted" style={styles.patientMeta}>
                                         {age ? `${age} yrs` : ''}{age && pt.blood_group ? ' • ' : ''}{pt.blood_group ?? ''}
                                         {pt.existing_conditions && pt.existing_conditions.length > 0
                                             ? ` • ${pt.existing_conditions.join(', ')}`
                                             : ''}
-                                    </Text>
-                                </View>
-                                <Feather name="chevron-right" size={18} color={patientColors.textMuted} />
+                                    </ThemedText>
+                                </ThemedView>
+                                <Feather name="chevron-right" size={18} color={colors.textMuted} />
                             </Pressable>
                         );
                     })
@@ -811,137 +821,137 @@ export default function CaregiverDashboardScreen() {
                         style={({ pressed }) => [styles.emptyPatientCard, pressed && { opacity: 0.85 }]}
                         onPress={() => setIsAddPatientOpen(true)}
                     >
-                        <Feather name="user-plus" size={20} color={patientColors.textMuted} />
-                        <Text style={styles.emptyPatientText}>No patients added yet. Tap to add your first patient.</Text>
+                        <Feather name="user-plus" size={20} color={colors.textMuted} />
+                        <ThemedText size="sm" color="muted" style={styles.emptyPatientText}>No patients added yet. Tap to add your first patient.</ThemedText>
                     </Pressable>
                 )}
 
                 {/* ── 6. Recent Records ── */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Recent Records</Text>
+                <ThemedView style={styles.sectionHeader}>
+                    <ThemedText weight="semiBold" size="lg" style={styles.sectionTitle}>Recent Records</ThemedText>
                     <Pressable onPress={() => router.push('/(caregiver)/records' as any)}>
-                        <Text style={styles.viewAllLink}>View All</Text>
+                        <ThemedText weight="medium" size="sm" color="primary" style={styles.viewAllLink}>View All</ThemedText>
                     </Pressable>
-                </View>
+                </ThemedView>
                 {records.slice(0, 5).map((record) => (
                     <Pressable key={record.id}
                         style={({ pressed }) => [styles.recordCard, pressed && { opacity: 0.85 }]}
                         onPress={() => { setSelectedRecord(record); setIsRecordSheetOpen(true); }}>
-                        <View style={styles.recordContent}>
-                            <Text style={styles.recordDiagnosis}>{record.diagnosis}</Text>
-                            <Text style={styles.recordMeta}>Doctor  •  {new Date(record.created_at).toLocaleDateString()}</Text>
-                        </View>
-                        <Feather name="chevron-right" size={18} color={patientColors.textMuted} />
+                        <ThemedView style={styles.recordContent}>
+                            <ThemedText weight="semiBold" size="base" style={styles.recordDiagnosis}>{record.diagnosis}</ThemedText>
+                            <ThemedText size="sm" color="muted" style={styles.recordMeta}>Doctor  •  {new Date(record.created_at).toLocaleDateString()}</ThemedText>
+                        </ThemedView>
+                        <Feather name="chevron-right" size={18} color={colors.textMuted} />
                     </Pressable>
                 ))}
 
                 {/* ── 7. Past Consultations ── */}
-                <View style={[styles.sectionHeader, { marginTop: spacing.xl }]}>
-                    <Text style={styles.sectionTitle}>Past Consultations</Text>
-                </View>
+                <ThemedView style={[styles.sectionHeader, { marginTop: spacing.xl }]}>
+                    <ThemedText weight="semiBold" size="lg" style={styles.sectionTitle}>Past Consultations</ThemedText>
+                </ThemedView>
                 {appointments.filter(a => a.status === 'COMPLETED').slice(0, 5).map((appt) => (
                     <Pressable
                         key={appt.id}
                         style={({ pressed }) => [styles.recordCard, pressed && { opacity: 0.85 }]}
                         onPress={() => router.push({ pathname: '/(caregiver)/post-call-summary', params: { appointmentId: appt.id } } as any)}
                     >
-                        <View style={styles.recordContent}>
-                            <Text style={styles.recordDiagnosis}>
+                        <ThemedView style={styles.recordContent}>
+                            <ThemedText weight="semiBold" size="base" style={styles.recordDiagnosis}>
                                 Dr. {doctors.find(d => d.id === appt.doctor_id)?.full_name ?? 'Unknown'}
-                            </Text>
-                            <Text style={styles.recordMeta}>
+                            </ThemedText>
+                            <ThemedText size="sm" color="muted" style={styles.recordMeta}>
                                 {new Date(appt.scheduled_time).toLocaleDateString()} • Video Consultation
-                            </Text>
-                        </View>
-                        <Feather name="chevron-right" size={18} color={patientColors.textMuted} />
+                            </ThemedText>
+                        </ThemedView>
+                        <Feather name="chevron-right" size={18} color={colors.textMuted} />
                     </Pressable>
                 ))}
                 {appointments.filter(a => a.status === 'COMPLETED').length === 0 && (
-                    <Text style={{ textAlign: 'center', color: patientColors.textMuted, marginTop: spacing.sm }}>
+                    <ThemedText size="sm" color="muted" style={{ textAlign: 'center', marginTop: spacing.sm }}>
                         No past consultations yet.
-                    </Text>
+                    </ThemedText>
                 )}
 
-                <View style={{ height: spacing['3xl'] }} />
+                <ThemedView style={{ height: spacing['3xl'] }} />
             </ScrollView>
 
             {/* ═══ AVATAR DROPDOWN MENU ═══ */}
             <Modal animationType="fade" transparent visible={isProfileMenuOpen} onRequestClose={() => setIsProfileMenuOpen(false)}>
                 <Pressable style={styles.dropdownBackdrop} onPress={() => setIsProfileMenuOpen(false)}>
-                    <View style={styles.dropdownMenu}>
+                    <ThemedView style={styles.dropdownMenu}>
                         {[
                             { icon: 'user' as const, label: 'Profile', route: '/(caregiver)/profile' },
                             { icon: 'file-text' as const, label: 'Your Reports', route: '/(caregiver)/records' },
                         ].map((item) => (
                             <Pressable
                                 key={item.label}
-                                style={({ pressed }) => [styles.dropdownItem, pressed && { backgroundColor: patientColors.primaryLight }]}
+                                style={({ pressed }) => [styles.dropdownItem, pressed && { backgroundColor: colors.primaryLight }]}
                                 onPress={() => { setIsProfileMenuOpen(false); router.push(item.route as any); }}
                             >
-                                <Feather name={item.icon} size={18} color={patientColors.primary} />
-                                <Text style={styles.dropdownItemText}>{item.label}</Text>
+                                <Feather name={item.icon} size={18} color={colors.primary} />
+                                <ThemedText weight="medium" size="base" style={styles.dropdownItemText}>{item.label}</ThemedText>
                             </Pressable>
                         ))}
-                        <View style={styles.dropdownDivider} />
+                        <ThemedView style={styles.dropdownDivider} />
                         <Pressable
                             style={({ pressed }) => [styles.dropdownItem, pressed && { backgroundColor: '#FEE2E2' }]}
                             onPress={() => { setIsProfileMenuOpen(false); setShowLogoutAlert(true); }}
                         >
                             <Feather name="log-out" size={18} color="#EF4444" />
-                            <Text style={[styles.dropdownItemText, { color: '#EF4444' }]}>Logout</Text>
+                            <ThemedText weight="medium" size="base" style={[styles.dropdownItemText, { color: '#EF4444' }]}>Logout</ThemedText>
                         </Pressable>
-                    </View>
+                    </ThemedView>
                 </Pressable>
             </Modal>
 
             {/* ═══ BOOKING BOTTOM SHEET MODAL ═══ */}
             <Modal animationType="slide" transparent visible={isBookingOpen} onRequestClose={closeBooking}>
-                <Pressable style={ms.backdrop} onPress={closeBooking}><View /></Pressable>
-                <View style={[ms.sheet, { paddingBottom: insets.bottom }]}>
-                    <View style={ms.handleBar} />
-                    <View style={ms.sheetHeader}>
+                <Pressable style={ms.backdrop} onPress={closeBooking}><ThemedView /></Pressable>
+                <ThemedView style={[ms.sheet, { paddingBottom: insets.bottom }]}>
+                    <ThemedView style={ms.handleBar} />
+                    <ThemedView style={ms.sheetHeader}>
                         {bookingStep > 1 ? (
                             <Pressable onPress={goBackStep} style={ms.navCircle}>
-                                <Feather name="arrow-left" size={20} color={patientColors.textPrimary} />
+                                <Feather name="arrow-left" size={20} color={colors.textPrimary} />
                             </Pressable>
-                        ) : <View style={{ width: 36 }} />}
-                        <Text style={ms.sheetTitle}>{STEP_TITLES[bookingStep - 1]}</Text>
+                        ) : <ThemedView style={{ width: 36 }} />}
+                        <ThemedText weight="semiBold" size="lg" style={ms.sheetTitle}>{STEP_TITLES[bookingStep - 1]}</ThemedText>
                         <Pressable onPress={closeBooking} style={ms.navCircle}>
-                            <Feather name="x" size={20} color={patientColors.textMuted} />
+                            <Feather name="x" size={20} color={colors.textMuted} />
                         </Pressable>
-                    </View>
-                    <View style={ms.progressRow}>
+                    </ThemedView>
+                    <ThemedView style={ms.progressRow}>
                         {[1, 2, 3, 4].map((s) => (
-                            <View key={s} style={[ms.progressDot, s <= bookingStep && ms.progressDotActive]} />
+                            <ThemedView key={s} style={[ms.progressDot, s <= bookingStep && ms.progressDotActive]} />
                         ))}
-                    </View>
+                    </ThemedView>
                     <ScrollView contentContainerStyle={ms.sheetScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                         {bookingStep === 1 && renderStep1()}
                         {bookingStep === 2 && renderStep2()}
                         {bookingStep === 3 && renderStep3()}
                         {bookingStep === 4 && renderStep4()}
                     </ScrollView>
-                </View>
+                </ThemedView>
             </Modal>
 
             {/* ═══ SUCCESS MODAL (themed) ═══ */}
             <Modal animationType="fade" transparent visible={showSuccess} onRequestClose={dismissSuccess}>
-                <View style={ms.successOverlay}>
-                    <View style={ms.successCard}>
-                        <View style={ms.successIconCircle}>
+                <ThemedView style={ms.successOverlay}>
+                    <ThemedView style={ms.successCard}>
+                        <ThemedView style={ms.successIconCircle}>
                             <Feather name="check" size={32} color="#FFFFFF" />
-                        </View>
-                        <Text style={ms.successTitle}>Booking Confirmed!</Text>
-                        <Text style={ms.successBody}>
+                        </ThemedView>
+                        <ThemedText weight="bold" size="xl" style={ms.successTitle}>Booking Confirmed!</ThemedText>
+                        <ThemedText size="sm" color="secondary" style={ms.successBody}>
                             Your consultation with {selectedDoctor?.full_name ?? 'your doctor'} has been booked successfully. You'll receive a confirmation email shortly.
-                        </Text>
+                        </ThemedText>
                         <Pressable style={({ pressed }) => [ms.successButton, pressed && { opacity: 0.85 }]}
                             onPress={dismissSuccess}>
-                            <Text style={ms.successButtonText}>Back to Dashboard</Text>
+                            <ThemedText weight="semiBold" size="base" style={ms.successButtonText}>Back to Dashboard</ThemedText>
                             <Feather name="arrow-right" size={18} color="#FFFFFF" />
                         </Pressable>
-                    </View>
-                </View>
+                    </ThemedView>
+                </ThemedView>
             </Modal>
 
             {/* ═══ MEDICAL RECORD SHEET ═══ */}
@@ -1019,62 +1029,62 @@ export default function CaregiverDashboardScreen() {
 
 // ─── Dashboard Styles ───────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: patientColors.background },
+const useStyles = (colors: any) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
     scrollContent: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xl },
     headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     logoImage: { width: 34, height: 34, resizeMode: 'contain' },
-    brandText: { fontFamily: typography.fontFamily.bold, ...typography.size.lg, color: patientColors.textPrimary },
+    brandText: { fontFamily: typography.fontFamily.bold, ...typography.size.lg, color: colors.textPrimary },
     avatarWrapper: { position: 'relative' },
 
     // Dropdown
     dropdownBackdrop: { flex: 1 },
-    dropdownMenu: { position: 'absolute', top: 70, right: 20, width: 200, backgroundColor: patientColors.surface, borderRadius: radii.lg, borderWidth: 1, borderColor: patientColors.borderLight, paddingVertical: spacing.sm, ...shadows.elevated },
+    dropdownMenu: { position: 'absolute', top: 70, right: 20, width: 200, backgroundColor: colors.surface, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.borderLight, paddingVertical: spacing.sm, ...shadows.elevated },
     dropdownItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
-    dropdownItemText: { fontFamily: typography.fontFamily.medium, ...typography.size.base, color: patientColors.textPrimary },
-    dropdownDivider: { height: 1, backgroundColor: patientColors.borderLight, marginVertical: spacing.xs },
-    avatar: { width: 40, height: 40, borderRadius: radii.full, backgroundColor: patientColors.primary, alignItems: 'center', justifyContent: 'center' },
+    dropdownItemText: { fontFamily: typography.fontFamily.medium, ...typography.size.base, color: colors.textPrimary },
+    dropdownDivider: { height: 1, backgroundColor: colors.borderLight, marginVertical: spacing.xs },
+    avatar: { width: 40, height: 40, borderRadius: radii.full, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
     avatarText: { fontFamily: typography.fontFamily.semiBold, ...typography.size.sm, color: '#FFFFFF' },
-    notificationDot: { position: 'absolute', top: 0, right: 0, width: 10, height: 10, borderRadius: radii.full, backgroundColor: patientColors.error, borderWidth: 2, borderColor: patientColors.background },
+    notificationDot: { position: 'absolute', top: 0, right: 0, width: 10, height: 10, borderRadius: radii.full, backgroundColor: colors.error, borderWidth: 2, borderColor: colors.background },
     welcomeSection: { marginBottom: spacing['2xl'] },
-    greeting: { fontFamily: typography.fontFamily.bold, ...typography.size.xl, color: patientColors.textPrimary, marginBottom: spacing.xs },
-    subtitle: { fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: patientColors.textMuted },
-    nextUpCard: { backgroundColor: patientColors.surface, borderRadius: radii.lg, padding: spacing.lg, marginBottom: spacing.xl, borderWidth: 1, borderColor: patientColors.borderLight, ...shadows.elevated },
-    nextUpLabel: { fontFamily: typography.fontFamily.semiBold, ...typography.size.xs, color: patientColors.primary, letterSpacing: 1, marginBottom: spacing.md },
+    greeting: { fontFamily: typography.fontFamily.bold, ...typography.size.xl, color: colors.textPrimary, marginBottom: spacing.xs },
+    subtitle: { fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: colors.textMuted },
+    nextUpCard: { backgroundColor: colors.surface, borderRadius: radii.lg, padding: spacing.lg, marginBottom: spacing.xl, borderWidth: 1, borderColor: colors.borderLight, ...shadows.elevated },
+    nextUpLabel: { fontFamily: typography.fontFamily.semiBold, ...typography.size.xs, color: colors.primary, letterSpacing: 1, marginBottom: spacing.md },
     nextUpBody: { marginBottom: spacing.lg },
     nextUpRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
-    doctorAvatar: { width: 44, height: 44, borderRadius: radii.full, backgroundColor: patientColors.primaryLight, alignItems: 'center', justifyContent: 'center' },
-    doctorAvatarText: { fontFamily: typography.fontFamily.semiBold, ...typography.size.sm, color: patientColors.primary },
+    doctorAvatar: { width: 44, height: 44, borderRadius: radii.full, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
+    doctorAvatarText: { fontFamily: typography.fontFamily.semiBold, ...typography.size.sm, color: colors.primary },
     nextUpInfo: { flex: 1 },
-    nextUpDoctor: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: patientColors.textPrimary },
-    nextUpSpec: { fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: patientColors.textSecondary },
+    nextUpDoctor: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: colors.textPrimary },
+    nextUpSpec: { fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: colors.textSecondary },
     nextUpTimeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginLeft: 44 + spacing.md },
-    nextUpTime: { fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: patientColors.textMuted },
+    nextUpTime: { fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: colors.textMuted },
     nextUpJoinBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, paddingVertical: spacing.md },
     nextUpJoinText: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base },
-    nextUpShareBtn: { width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, borderWidth: 1, borderColor: patientColors.border, backgroundColor: patientColors.surface },
-    joinCallButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: patientColors.primary, paddingVertical: spacing.md, borderRadius: radii.md },
+    nextUpShareBtn: { width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+    joinCallButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.primary, paddingVertical: spacing.md, borderRadius: radii.md },
     joinCallText: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: '#FFFFFF' },
-    bookCta: { flexDirection: 'row', alignItems: 'center', backgroundColor: patientColors.primaryLight, borderRadius: radii.lg, padding: spacing.lg, marginBottom: spacing['2xl'], gap: spacing.md },
-    bookCtaIconCircle: { width: 44, height: 44, borderRadius: radii.full, backgroundColor: patientColors.surface, alignItems: 'center', justifyContent: 'center', ...shadows.card },
+    bookCta: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primaryLight, borderRadius: radii.lg, padding: spacing.lg, marginBottom: spacing['2xl'], gap: spacing.md },
+    bookCtaIconCircle: { width: 44, height: 44, borderRadius: radii.full, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', ...shadows.card },
     bookCtaTextBlock: { flex: 1 },
-    bookCtaTitle: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: patientColors.textPrimary },
-    bookCtaSubtitle: { fontFamily: typography.fontFamily.regular, ...typography.size.xs, color: patientColors.textSecondary, marginTop: spacing.xxs },
+    bookCtaTitle: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: colors.textPrimary },
+    bookCtaSubtitle: { fontFamily: typography.fontFamily.regular, ...typography.size.xs, color: colors.textSecondary, marginTop: spacing.xxs },
     sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
-    sectionTitle: { fontFamily: typography.fontFamily.semiBold, ...typography.size.lg, color: patientColors.textPrimary },
-    viewAllLink: { fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: patientColors.primary },
-    recordCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: patientColors.surface, borderRadius: radii.md, padding: spacing.lg, marginBottom: spacing.sm, borderWidth: 1, borderColor: patientColors.borderLight, ...shadows.card },
+    sectionTitle: { fontFamily: typography.fontFamily.semiBold, ...typography.size.lg, color: colors.textPrimary },
+    viewAllLink: { fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: colors.primary },
+    recordCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: radii.md, padding: spacing.lg, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.borderLight, ...shadows.card },
     recordContent: { flex: 1 },
-    recordDiagnosis: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: patientColors.textPrimary, marginBottom: spacing.xxs },
-    recordMeta: { fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: patientColors.textMuted },
+    recordDiagnosis: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: colors.textPrimary, marginBottom: spacing.xxs },
+    recordMeta: { fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: colors.textMuted },
 
     // Patient cards (full-width rows)
     patientCard: {
         flexDirection: 'row', alignItems: 'center',
-        backgroundColor: patientColors.surface, borderRadius: radii.md,
+        backgroundColor: colors.surface, borderRadius: radii.md,
         padding: spacing.lg, marginBottom: spacing.sm, borderWidth: 1,
-        borderColor: patientColors.borderLight, gap: spacing.md, ...shadows.card,
+        borderColor: colors.borderLight, gap: spacing.md, ...shadows.card,
     },
     patientAvatar: {
         width: 44, height: 44, borderRadius: radii.full,
@@ -1086,28 +1096,28 @@ const styles = StyleSheet.create({
     patientInfo: { flex: 1 },
     patientName: {
         fontFamily: typography.fontFamily.semiBold, ...typography.size.base,
-        color: patientColors.textPrimary, marginBottom: 2,
+        color: colors.textPrimary, marginBottom: 2,
     },
     patientMeta: {
         fontFamily: typography.fontFamily.regular, ...typography.size.sm,
-        color: patientColors.textMuted,
+        color: colors.textMuted,
     },
     emptyPatientCard: {
         flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-        backgroundColor: patientColors.surfaceMuted, borderRadius: radii.md,
+        backgroundColor: colors.surfaceMuted, borderRadius: radii.md,
         padding: spacing.lg, marginBottom: spacing.xl,
-        borderWidth: 1, borderColor: patientColors.borderLight, borderStyle: 'dashed',
+        borderWidth: 1, borderColor: colors.borderLight, borderStyle: 'dashed',
     },
     emptyPatientText: {
         flex: 1, fontFamily: typography.fontFamily.regular, ...typography.size.sm,
-        color: patientColors.textMuted,
+        color: colors.textMuted,
     },
 
     // FAB
     fab: {
         position: 'absolute', bottom: 24, right: 20,
         width: 56, height: 56, borderRadius: 28,
-        backgroundColor: patientColors.primary,
+        backgroundColor: colors.primary,
         alignItems: 'center', justifyContent: 'center',
         ...shadows.elevated,
     },
@@ -1115,21 +1125,21 @@ const styles = StyleSheet.create({
 
 // ─── Modal Styles ───────────────────────────────────────────────────────────
 
-const ms = StyleSheet.create({
+const useMs = (colors: any) => StyleSheet.create({
     // Backdrop + sheet
     backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-    sheet: { position: 'absolute', bottom: 0, left: 0, right: 0, height: SHEET_HEIGHT, backgroundColor: patientColors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, ...shadows.elevated },
-    handleBar: { width: 40, height: 4, borderRadius: 2, backgroundColor: patientColors.border, alignSelf: 'center', marginTop: spacing.sm, marginBottom: spacing.xs },
+    sheet: { position: 'absolute', bottom: 0, left: 0, right: 0, height: SHEET_HEIGHT, backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, ...shadows.elevated },
+    handleBar: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: spacing.sm, marginBottom: spacing.xs },
 
     // Header
     sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-    navCircle: { width: 36, height: 36, borderRadius: radii.full, backgroundColor: patientColors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
-    sheetTitle: { fontFamily: typography.fontFamily.semiBold, ...typography.size.lg, color: patientColors.textPrimary, flex: 1, textAlign: 'center' },
+    navCircle: { width: 36, height: 36, borderRadius: radii.full, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
+    sheetTitle: { fontFamily: typography.fontFamily.semiBold, ...typography.size.lg, color: colors.textPrimary, flex: 1, textAlign: 'center' },
 
     // Progress
     progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingVertical: spacing.sm },
-    progressDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: patientColors.borderLight },
-    progressDotActive: { backgroundColor: patientColors.primary, width: 24, borderRadius: 4 },
+    progressDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.borderLight },
+    progressDotActive: { backgroundColor: colors.primary, width: 24, borderRadius: 4 },
 
     // Scroll
     sheetScroll: { paddingHorizontal: spacing.lg, paddingBottom: spacing['6xl'] },
@@ -1139,96 +1149,96 @@ const ms = StyleSheet.create({
     specGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
     specCard: {
         width: '47%' as unknown as number,
-        backgroundColor: patientColors.surfaceMuted, borderRadius: radii.lg,
+        backgroundColor: colors.surfaceMuted, borderRadius: radii.lg,
         paddingVertical: spacing.xl, paddingHorizontal: spacing.md,
         alignItems: 'center', gap: spacing.sm,
-        borderWidth: 1, borderColor: patientColors.borderLight,
+        borderWidth: 1, borderColor: colors.borderLight,
     },
     specIconCircle: { width: 48, height: 48, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center' },
-    specName: { fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: patientColors.textPrimary, textAlign: 'center' },
+    specName: { fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: colors.textPrimary, textAlign: 'center' },
 
     // Step 2 — Doctor list
-    doctorCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: patientColors.surfaceMuted, borderRadius: radii.md, padding: spacing.lg, marginBottom: spacing.sm, gap: spacing.md, borderWidth: 1, borderColor: patientColors.borderLight },
+    doctorCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceMuted, borderRadius: radii.md, padding: spacing.lg, marginBottom: spacing.sm, gap: spacing.md, borderWidth: 1, borderColor: colors.borderLight },
     doctorAvatar: { width: 48, height: 48, borderRadius: radii.full, alignItems: 'center', justifyContent: 'center' },
     doctorAvatarText: { fontFamily: typography.fontFamily.semiBold, ...typography.size.sm },
     doctorInfo: { flex: 1 },
-    doctorName: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: patientColors.textPrimary },
-    doctorMeta: { fontFamily: typography.fontFamily.regular, ...typography.size.xs, color: patientColors.textMuted, marginTop: spacing.xxs },
-    doctorFee: { fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: patientColors.primary, marginTop: spacing.xs },
+    doctorName: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: colors.textPrimary },
+    doctorMeta: { fontFamily: typography.fontFamily.regular, ...typography.size.xs, color: colors.textMuted, marginTop: spacing.xxs },
+    doctorFee: { fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: colors.primary, marginTop: spacing.xs },
 
     // Step 3 — Calendar
-    subLabel: { fontFamily: typography.fontFamily.semiBold, ...typography.size.sm, color: patientColors.textSecondary, marginBottom: spacing.md, textTransform: 'uppercase', letterSpacing: 0.5 },
+    subLabel: { fontFamily: typography.fontFamily.semiBold, ...typography.size.sm, color: colors.textSecondary, marginBottom: spacing.md, textTransform: 'uppercase', letterSpacing: 0.5 },
     calHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
-    calMonthTitle: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: patientColors.textPrimary },
-    calNav: { width: 36, height: 36, borderRadius: radii.full, backgroundColor: patientColors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
+    calMonthTitle: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: colors.textPrimary },
+    calNav: { width: 36, height: 36, borderRadius: radii.full, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
     calDowRow: { flexDirection: 'row', marginBottom: spacing.xs },
-    calDowText: { flex: 1, textAlign: 'center', fontFamily: typography.fontFamily.medium, ...typography.size.xs, color: patientColors.textMuted },
+    calDowText: { flex: 1, textAlign: 'center', fontFamily: typography.fontFamily.medium, ...typography.size.xs, color: colors.textMuted },
     calWeekRow: { flexDirection: 'row', marginBottom: spacing.xxs },
     calCell: { flex: 1, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, margin: 1 },
-    calCellToday: { borderWidth: 1.5, borderColor: patientColors.primary },
-    calCellSelected: { backgroundColor: patientColors.primary },
+    calCellToday: { borderWidth: 1.5, borderColor: colors.primary },
+    calCellSelected: { backgroundColor: colors.primary },
     calCellDisabled: { opacity: 0.3 },
-    calCellText: { fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: patientColors.textPrimary },
-    calCellTodayText: { color: patientColors.primary, fontFamily: typography.fontFamily.bold },
+    calCellText: { fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: colors.textPrimary },
+    calCellTodayText: { color: colors.primary, fontFamily: typography.fontFamily.bold },
     calCellSelectedText: { color: '#FFFFFF', fontFamily: typography.fontFamily.bold },
-    calCellDisabledText: { color: patientColors.textMuted },
+    calCellDisabledText: { color: colors.textMuted },
 
     // Time grid — fixed 3 columns
     timeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-    timePill: { width: '31%' as unknown as number, paddingVertical: spacing.md, borderRadius: radii.md, borderWidth: 1.5, borderColor: patientColors.border, backgroundColor: patientColors.surface, alignItems: 'center' },
-    timePillSelected: { backgroundColor: patientColors.primary, borderColor: patientColors.primary },
-    timePillText: { fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: patientColors.textPrimary },
+    timePill: { width: '31%' as unknown as number, paddingVertical: spacing.md, borderRadius: radii.md, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center' },
+    timePillSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+    timePillText: { fontFamily: typography.fontFamily.medium, ...typography.size.sm, color: colors.textPrimary },
     timePillTextSelected: { color: '#FFFFFF' },
-    continueButton: { marginTop: spacing['2xl'], backgroundColor: patientColors.primary, paddingVertical: spacing.md, borderRadius: radii.md, alignItems: 'center' },
-    continueButtonDisabled: { backgroundColor: patientColors.border },
+    continueButton: { marginTop: spacing['2xl'], backgroundColor: colors.primary, paddingVertical: spacing.md, borderRadius: radii.md, alignItems: 'center' },
+    continueButtonDisabled: { backgroundColor: colors.border },
     continueText: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: '#FFFFFF' },
-    continueTextDisabled: { color: patientColors.textMuted },
+    continueTextDisabled: { color: colors.textMuted },
 
     // Step 4 — Summary
-    summaryCard: { backgroundColor: patientColors.surfaceMuted, borderRadius: radii.lg, padding: spacing.xl, marginBottom: spacing.xl, borderWidth: 1, borderColor: patientColors.borderLight },
-    summaryTitle: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: patientColors.textPrimary, marginBottom: spacing.lg },
+    summaryCard: { backgroundColor: colors.surfaceMuted, borderRadius: radii.lg, padding: spacing.xl, marginBottom: spacing.xl, borderWidth: 1, borderColor: colors.borderLight },
+    summaryTitle: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: colors.textPrimary, marginBottom: spacing.lg },
     summaryRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.md, gap: spacing.md },
     summaryDotContainer: { width: 20, paddingTop: spacing.xs, alignItems: 'center' },
-    summaryDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: patientColors.primary },
+    summaryDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
     summaryContent: { flex: 1 },
-    summaryLabel: { fontFamily: typography.fontFamily.regular, ...typography.size.xs, color: patientColors.textMuted },
-    summaryValue: { fontFamily: typography.fontFamily.medium, ...typography.size.base, color: patientColors.textPrimary, marginTop: spacing.xxs },
-    summaryDivider: { height: 1, backgroundColor: patientColors.border, marginVertical: spacing.md },
+    summaryLabel: { fontFamily: typography.fontFamily.regular, ...typography.size.xs, color: colors.textMuted },
+    summaryValue: { fontFamily: typography.fontFamily.medium, ...typography.size.base, color: colors.textPrimary, marginTop: spacing.xxs },
+    summaryDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
     summaryFeeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    summaryFeeLabel: { fontFamily: typography.fontFamily.medium, ...typography.size.base, color: patientColors.textPrimary },
-    summaryFeeValue: { fontFamily: typography.fontFamily.bold, ...typography.size.xl, color: patientColors.primary },
+    summaryFeeLabel: { fontFamily: typography.fontFamily.medium, ...typography.size.base, color: colors.textPrimary },
+    summaryFeeValue: { fontFamily: typography.fontFamily.bold, ...typography.size.xl, color: colors.primary },
 
     // Step 4 — Payment method
     paymentGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.xl },
     paymentCard: {
         width: '48%' as unknown as number,
-        backgroundColor: patientColors.surfaceMuted, borderRadius: radii.md,
-        padding: spacing.md, borderWidth: 1.5, borderColor: patientColors.borderLight,
+        backgroundColor: colors.surfaceMuted, borderRadius: radii.md,
+        padding: spacing.md, borderWidth: 1.5, borderColor: colors.borderLight,
         alignItems: 'center', gap: spacing.xs, position: 'relative',
     },
-    paymentCardActive: { borderColor: patientColors.primary, backgroundColor: patientColors.primaryLight },
-    paymentIcon: { width: 40, height: 40, borderRadius: radii.full, backgroundColor: patientColors.surface, alignItems: 'center', justifyContent: 'center' },
-    paymentIconActive: { backgroundColor: patientColors.primary },
-    paymentLabel: { fontFamily: typography.fontFamily.semiBold, ...typography.size.sm, color: patientColors.textPrimary, textAlign: 'center' },
-    paymentLabelActive: { color: patientColors.primaryDark },
-    paymentDesc: { fontFamily: typography.fontFamily.regular, ...typography.size.xs, color: patientColors.textMuted, textAlign: 'center' },
-    paymentDescActive: { color: patientColors.textSecondary },
-    paymentCheck: { position: 'absolute', top: spacing.sm, right: spacing.sm, width: 22, height: 22, borderRadius: 11, backgroundColor: patientColors.primaryLight, alignItems: 'center', justifyContent: 'center' },
+    paymentCardActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+    paymentIcon: { width: 40, height: 40, borderRadius: radii.full, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+    paymentIconActive: { backgroundColor: colors.primary },
+    paymentLabel: { fontFamily: typography.fontFamily.semiBold, ...typography.size.sm, color: colors.textPrimary, textAlign: 'center' },
+    paymentLabelActive: { color: colors.primaryDark },
+    paymentDesc: { fontFamily: typography.fontFamily.regular, ...typography.size.xs, color: colors.textMuted, textAlign: 'center' },
+    paymentDescActive: { color: colors.textSecondary },
+    paymentCheck: { position: 'absolute', top: spacing.sm, right: spacing.sm, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
 
     // Pay button
-    payButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: patientColors.primary, paddingVertical: spacing.lg, borderRadius: radii.md, marginBottom: spacing.md },
+    payButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.primary, paddingVertical: spacing.lg, borderRadius: radii.md, marginBottom: spacing.md },
     payButtonText: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: '#FFFFFF' },
-    payNote: { fontFamily: typography.fontFamily.regular, ...typography.size.xs, color: patientColors.textMuted, textAlign: 'center' },
+    payNote: { fontFamily: typography.fontFamily.regular, ...typography.size.xs, color: colors.textMuted, textAlign: 'center' },
 
     // Success modal
     successOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing['2xl'] },
-    successCard: { backgroundColor: patientColors.surface, borderRadius: radii.xl, padding: spacing['3xl'], alignItems: 'center', width: '100%', ...shadows.elevated },
-    successIconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: patientColors.primary, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xl },
-    successTitle: { fontFamily: typography.fontFamily.bold, ...typography.size.xl, color: patientColors.textPrimary, marginBottom: spacing.sm, textAlign: 'center' },
-    successBody: { fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: patientColors.textSecondary, textAlign: 'center', marginBottom: spacing['2xl'], lineHeight: 22 },
-    successButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: patientColors.primary, paddingVertical: spacing.md, paddingHorizontal: spacing['2xl'], borderRadius: radii.md, width: '100%' },
+    successCard: { backgroundColor: colors.surface, borderRadius: radii.xl, padding: spacing['3xl'], alignItems: 'center', width: '100%', ...shadows.elevated },
+    successIconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xl },
+    successTitle: { fontFamily: typography.fontFamily.bold, ...typography.size.xl, color: colors.textPrimary, marginBottom: spacing.sm, textAlign: 'center' },
+    successBody: { fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing['2xl'], lineHeight: 22 },
+    successButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.primary, paddingVertical: spacing.md, paddingHorizontal: spacing['2xl'], borderRadius: radii.md, width: '100%' },
     successButtonText: { fontFamily: typography.fontFamily.semiBold, ...typography.size.base, color: '#FFFFFF' },
 
     // Shared
-    emptyText: { fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: patientColors.textMuted, textAlign: 'center', paddingVertical: spacing['3xl'] },
+    emptyText: { fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing['3xl'] },
 });

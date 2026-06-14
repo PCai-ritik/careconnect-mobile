@@ -6,7 +6,7 @@
  * Wired to POST /medical-records with structured vitals.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -26,11 +26,13 @@ import useSwipeDown from '@/hooks/useSwipeDown';
 import { Feather } from '@expo/vector-icons';
 import {
     spacing,
-    doctorColors,
-    typography,
     shadows,
     radii,
+    typography,
+    doctorColors,
 } from '@/constants/theme';
+import { useTheme } from '@/providers/ThemeProvider';
+import { ThemedText, ThemedView } from '@/components/shared/Themed';
 import { useAuth } from '@/hooks/useAuth';
 import { getDoctorProfile, createMedicalRecord, createAppointment, getAvailableSlots, getMe } from '@/services/doctor';
 import { ApiError } from '@/services/api';
@@ -106,15 +108,16 @@ function FormField({
     placeholder: string;
     multiline?: boolean;
 }) {
+    const { colors } = useTheme();
     return (
         <View style={s.fieldGroup}>
-            <Text style={s.fieldLabel}>{label}</Text>
+            <ThemedText color="primary" weight="medium" size="sm" style={s.fieldLabel}>{label}</ThemedText>
             <TextInput
-                style={[s.input, multiline && s.inputMultiline]}
+                style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }, multiline && s.inputMultiline]}
                 value={value}
                 onChangeText={onChangeText}
                 placeholder={placeholder}
-                placeholderTextColor={doctorColors.textMuted}
+                placeholderTextColor={colors.textMuted}
                 multiline={multiline}
                 textAlignVertical={multiline ? 'top' : 'center'}
             />
@@ -133,15 +136,16 @@ function SmallField({
     onChangeText: (t: string) => void;
     placeholder: string;
 }) {
+    const { colors } = useTheme();
     return (
         <View style={s.smallFieldGroup}>
-            <Text style={s.fieldLabel}>{label}</Text>
+            <ThemedText color="primary" weight="medium" size="sm" style={s.fieldLabel}>{label}</ThemedText>
             <TextInput
-                style={s.input}
+                style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                 value={value}
                 onChangeText={onChangeText}
                 placeholder={placeholder}
-                placeholderTextColor={doctorColors.textMuted}
+                placeholderTextColor={colors.textMuted}
             />
         </View>
     );
@@ -164,6 +168,7 @@ function EditFormTab({
     medications: Medication[];
     setMedications: React.Dispatch<React.SetStateAction<Medication[]>>;
 }) {
+    const { colors } = useTheme();
     const updateField = (key: string) => (value: string) => {
         setFormData((prev) => ({ ...prev, [key]: value }));
     };
@@ -192,7 +197,7 @@ function EditFormTab({
             keyboardShouldPersistTaps="handled"
         >
             {/* Patient Details */}
-            <Text style={s.sectionLabel}>Patient Details</Text>
+            <ThemedText color="muted" weight="semiBold" size="sm" style={s.sectionLabel}>Patient Details</ThemedText>
             <View style={s.tripleRow}>
                 <SmallField
                     label="Patient Name"
@@ -223,48 +228,48 @@ function EditFormTab({
             />
 
             {/* Vitals — 4-field grid matching web dashboard */}
-            <Text style={s.fieldLabel}>Vitals</Text>
+            <ThemedText color="primary" weight="medium" size="sm" style={s.fieldLabel}>Vitals</ThemedText>
             <View style={s.vitalsRow}>
                 <View style={s.vitalField}>
-                    <Text style={s.vitalLabel}>BP (mmHg)</Text>
+                    <ThemedText color="muted" size="xs" style={s.vitalLabel}>BP (mmHg)</ThemedText>
                     <TextInput
-                        style={s.input}
+                        style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                         value={vitals.bp}
                         onChangeText={(v) => setVitals(prev => ({ ...prev, bp: v }))}
                         placeholder="120/80"
-                        placeholderTextColor={doctorColors.textMuted}
+                        placeholderTextColor={colors.textMuted}
                     />
                 </View>
                 <View style={s.vitalField}>
-                    <Text style={s.vitalLabel}>Pulse (bpm)</Text>
+                    <ThemedText color="muted" size="xs" style={s.vitalLabel}>Pulse (bpm)</ThemedText>
                     <TextInput
-                        style={s.input}
+                        style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                         value={vitals.pulse}
                         onChangeText={(v) => setVitals(prev => ({ ...prev, pulse: v }))}
                         placeholder="72"
-                        placeholderTextColor={doctorColors.textMuted}
+                        placeholderTextColor={colors.textMuted}
                         keyboardType="numeric"
                     />
                 </View>
                 <View style={s.vitalField}>
-                    <Text style={s.vitalLabel}>Temp (°F)</Text>
+                    <ThemedText color="muted" size="xs" style={s.vitalLabel}>Temp (°F)</ThemedText>
                     <TextInput
-                        style={s.input}
+                        style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                         value={vitals.temp}
                         onChangeText={(v) => setVitals(prev => ({ ...prev, temp: v }))}
                         placeholder="98.6"
-                        placeholderTextColor={doctorColors.textMuted}
+                        placeholderTextColor={colors.textMuted}
                         keyboardType="numeric"
                     />
                 </View>
                 <View style={s.vitalField}>
-                    <Text style={s.vitalLabel}>Weight (kg)</Text>
+                    <ThemedText color="muted" size="xs" style={s.vitalLabel}>Weight (kg)</ThemedText>
                     <TextInput
-                        style={s.input}
+                        style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                         value={vitals.weight}
                         onChangeText={(v) => setVitals(prev => ({ ...prev, weight: v }))}
                         placeholder="70"
-                        placeholderTextColor={doctorColors.textMuted}
+                        placeholderTextColor={colors.textMuted}
                         keyboardType="numeric"
                     />
                 </View>
@@ -278,74 +283,74 @@ function EditFormTab({
                 multiline
             />
 
-            <View style={s.separator} />
+            <View style={[s.separator, { backgroundColor: colors.borderLight }]} />
 
             {/* Medications */}
             <View style={s.medsHeader}>
-                <Text style={s.sectionLabel}>Medications</Text>
+                <ThemedText color="muted" weight="semiBold" size="sm" style={s.sectionLabel}>Medications</ThemedText>
                 <Pressable
                     onPress={addMedication}
-                    style={({ pressed }) => [s.addBtn, pressed && { opacity: 0.7 }]}
+                    style={({ pressed }) => [s.addBtn, { borderColor: colors.primary }, pressed && { opacity: 0.7 }]}
                 >
-                    <Feather name="plus" size={14} color={doctorColors.primary} />
-                    <Text style={s.addBtnText}>Add</Text>
+                    <Feather name="plus" size={14} color={colors.primary} />
+                    <ThemedText color="brand" weight="medium" size="sm" style={s.addBtnText}>Add</ThemedText>
                 </Pressable>
             </View>
 
             {medications.map((med, index) => (
-                <View key={med.id} style={s.medCard}>
+                <View key={med.id} style={[s.medCard, { borderColor: colors.borderLight, backgroundColor: colors.surface }]}>
                     <View style={s.medCardHeader}>
-                        <Text style={s.medCardTitle}>Medicine {index + 1}</Text>
+                        <ThemedText color="primary" weight="semiBold" size="sm" style={s.medCardTitle}>Medicine {index + 1}</ThemedText>
                         {medications.length > 1 && (
                             <Pressable
                                 onPress={() => removeMedication(med.id)}
                                 hitSlop={8}
                             >
-                                <Feather name="trash-2" size={16} color={doctorColors.error} />
+                                <Feather name="trash-2" size={16} color="#EF4444" />
                             </Pressable>
                         )}
                     </View>
                     <View style={s.medGrid}>
                         <TextInput
-                            style={[s.input, s.medGridItem]}
+                            style={[s.input, s.medGridItem, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={med.name}
                             onChangeText={updateMedField(med.id, 'name')}
                             placeholder="Medicine name"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                         />
                         <TextInput
-                            style={[s.input, s.medGridItem]}
+                            style={[s.input, s.medGridItem, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={med.dosage}
                             onChangeText={updateMedField(med.id, 'dosage')}
                             placeholder="Dosage (e.g., 500mg)"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                         />
                         <TextInput
-                            style={[s.input, s.medGridItem]}
+                            style={[s.input, s.medGridItem, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={med.frequency}
                             onChangeText={updateMedField(med.id, 'frequency')}
                             placeholder="Frequency (e.g., 1-0-1)"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                         />
                         <TextInput
-                            style={[s.input, s.medGridItem]}
+                            style={[s.input, s.medGridItem, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={med.duration}
                             onChangeText={updateMedField(med.id, 'duration')}
                             placeholder="Duration (e.g., 5 days)"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                         />
                     </View>
                     <TextInput
-                        style={s.input}
+                        style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                         value={med.instructions}
                         onChangeText={updateMedField(med.id, 'instructions')}
                         placeholder="Special instructions (e.g., after meals)"
-                        placeholderTextColor={doctorColors.textMuted}
+                        placeholderTextColor={colors.textMuted}
                     />
                 </View>
             ))}
 
-            <View style={s.separator} />
+            <View style={[s.separator, { backgroundColor: colors.borderLight }]} />
 
             <FormField
                 label="General Advice"
@@ -386,6 +391,7 @@ function PreviewTab({
     medications: Medication[];
     doctorProfile: DoctorProfile | null;
 }) {
+    const { colors } = useTheme();
     const filledMeds = medications.filter((m) => m.name.trim());
     const currentDate = formatDate();
     const doctorName = doctorProfile?.full_name ?? 'Doctor';
@@ -408,88 +414,88 @@ function PreviewTab({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={s.tabScrollInner}
         >
-            <View style={s.paper}>
+            <View style={[s.paper, { backgroundColor: colors.surface }]}>
                 {/* Doctor Header */}
-                <View style={s.paperHeader}>
-                    <Text style={s.paperDoctorName}>{doctorName}</Text>
-                    <Text style={s.paperSubtext}>{doctorLabel}</Text>
-                    {doctorPhone ? <Text style={s.paperSubtext}>Tel: {doctorPhone}</Text> : null}
+                <View style={[s.paperHeader, { borderBottomColor: colors.borderLight }]}>
+                    <ThemedText color="primary" weight="bold" size="2xl" style={s.paperDoctorName}>{doctorName}</ThemedText>
+                    <ThemedText color="muted" size="sm" style={s.paperSubtext}>{doctorLabel}</ThemedText>
+                    {doctorPhone ? <ThemedText color="muted" size="sm" style={s.paperSubtext}>Tel: {doctorPhone}</ThemedText> : null}
                 </View>
 
                 {/* Patient Info Bar */}
-                <View style={s.paperPatientBar}>
-                    <Text style={s.paperSmall}>
-                        <Text style={s.paperBold}>Patient: </Text>
+                <View style={[s.paperPatientBar, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderLight }]}>
+                    <ThemedText color="primary" size="sm" style={s.paperSmall}>
+                        <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Patient: </ThemedText>
                         {formData.patientName || '—'}
-                    </Text>
-                    <Text style={s.paperSmall}>
-                        <Text style={s.paperBold}>Age: </Text>
+                    </ThemedText>
+                    <ThemedText color="primary" size="sm" style={s.paperSmall}>
+                        <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Age: </ThemedText>
                         {formData.patientAge || '—'}
-                    </Text>
-                    <Text style={s.paperSmall}>
-                        <Text style={s.paperBold}>Gender: </Text>
+                    </ThemedText>
+                    <ThemedText color="primary" size="sm" style={s.paperSmall}>
+                        <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Gender: </ThemedText>
                         {formData.patientGender || '—'}
-                    </Text>
+                    </ThemedText>
                 </View>
 
                 {/* Date */}
-                <Text style={[s.paperSmall, { marginBottom: spacing.lg }]}>
-                    <Text style={s.paperBold}>Date: </Text>{currentDate}
-                </Text>
+                <ThemedText color="primary" size="sm" style={[s.paperSmall, { marginBottom: spacing.lg }]}>
+                    <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Date: </ThemedText>{currentDate}
+                </ThemedText>
 
                 {/* Chief Complaints & Vitals */}
                 {(formData.chiefComplaints || hasVitals) ? (
                     <View style={{ marginBottom: spacing.lg }}>
                         {formData.chiefComplaints ? (
-                            <Text style={s.paperSmall}>
-                                <Text style={s.paperBold}>C/C: </Text>
+                            <ThemedText color="primary" size="sm" style={s.paperSmall}>
+                                <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>C/C: </ThemedText>
                                 {formData.chiefComplaints}
-                            </Text>
+                            </ThemedText>
                         ) : null}
                         {hasVitals ? (
-                            <Text style={[s.paperSmall, { marginTop: spacing.xxs }]}>
-                                <Text style={s.paperBold}>Vitals: </Text>
+                            <ThemedText color="primary" size="sm" style={[s.paperSmall, { marginTop: spacing.xxs }]}>
+                                <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Vitals: </ThemedText>
                                 {vitalsStr}
-                            </Text>
+                            </ThemedText>
                         ) : null}
                     </View>
                 ) : null}
 
                 {/* Diagnosis */}
                 {formData.diagnosis ? (
-                    <Text style={[s.paperSmall, { marginBottom: spacing.lg }]}>
-                        <Text style={s.paperBold}>Diagnosis: </Text>
+                    <ThemedText color="primary" size="sm" style={[s.paperSmall, { marginBottom: spacing.lg }]}>
+                        <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Diagnosis: </ThemedText>
                         {formData.diagnosis}
-                    </Text>
+                    </ThemedText>
                 ) : null}
 
                 {/* Rx Symbol */}
-                <Text style={s.rxSymbol}>℞</Text>
+                <Text style={[s.rxSymbol, { color: colors.primaryLight }]}>℞</Text>
 
                 {/* Medications Table */}
                 {filledMeds.length > 0 && (
-                    <View style={s.medTable}>
+                    <View style={[s.medTable, { borderColor: colors.borderLight }]}>
                         {/* Table header */}
-                        <View style={[s.medTableRow, s.medTableHeaderRow]}>
-                            <Text style={[s.medTableCell, s.medTableNumCol, s.medTableHeaderText]}>#</Text>
-                            <Text style={[s.medTableCell, s.medTableNameCol, s.medTableHeaderText]}>Medicine</Text>
-                            <Text style={[s.medTableCell, s.medTableCol, s.medTableHeaderText]}>Dosage</Text>
-                            <Text style={[s.medTableCell, s.medTableCol, s.medTableHeaderText]}>Freq.</Text>
-                            <Text style={[s.medTableCell, s.medTableCol, s.medTableHeaderText]}>Duration</Text>
+                        <View style={[s.medTableRow, s.medTableHeaderRow, { backgroundColor: colors.surfaceMuted, borderBottomColor: colors.borderLight }]}>
+                            <ThemedText color="secondary" weight="semiBold" size="xs" style={[s.medTableCell, s.medTableNumCol, s.medTableHeaderText]}>#</ThemedText>
+                            <ThemedText color="secondary" weight="semiBold" size="xs" style={[s.medTableCell, s.medTableNameCol, s.medTableHeaderText]}>Medicine</ThemedText>
+                            <ThemedText color="secondary" weight="semiBold" size="xs" style={[s.medTableCell, s.medTableCol, s.medTableHeaderText]}>Dosage</ThemedText>
+                            <ThemedText color="secondary" weight="semiBold" size="xs" style={[s.medTableCell, s.medTableCol, s.medTableHeaderText]}>Freq.</ThemedText>
+                            <ThemedText color="secondary" weight="semiBold" size="xs" style={[s.medTableCell, s.medTableCol, s.medTableHeaderText]}>Duration</ThemedText>
                         </View>
                         {/* Table body */}
                         {filledMeds.map((med, idx) => (
-                            <View key={med.id} style={s.medTableRow}>
-                                <Text style={[s.medTableCell, s.medTableNumCol]}>{idx + 1}</Text>
+                            <View key={med.id} style={[s.medTableRow, { borderBottomColor: colors.borderLight }]}>
+                                <ThemedText color="primary" size="sm" style={[s.medTableCell, s.medTableNumCol]}>{idx + 1}</ThemedText>
                                 <View style={[s.medTableNameCol]}>
-                                    <Text style={s.medTableCell}>{med.name}</Text>
+                                    <ThemedText color="primary" size="sm" style={s.medTableCell}>{med.name}</ThemedText>
                                     {med.instructions ? (
-                                        <Text style={s.medTableInstructions}>({med.instructions})</Text>
+                                        <ThemedText color="muted" size="xs" style={s.medTableInstructions}>({med.instructions})</ThemedText>
                                     ) : null}
                                 </View>
-                                <Text style={[s.medTableCell, s.medTableCol]}>{med.dosage}</Text>
-                                <Text style={[s.medTableCell, s.medTableCol]}>{med.frequency}</Text>
-                                <Text style={[s.medTableCell, s.medTableCol]}>{med.duration}</Text>
+                                <ThemedText color="primary" size="sm" style={[s.medTableCell, s.medTableCol]}>{med.dosage}</ThemedText>
+                                <ThemedText color="primary" size="sm" style={[s.medTableCell, s.medTableCol]}>{med.frequency}</ThemedText>
+                                <ThemedText color="primary" size="sm" style={[s.medTableCell, s.medTableCol]}>{med.duration}</ThemedText>
                             </View>
                         ))}
                     </View>
@@ -497,32 +503,32 @@ function PreviewTab({
 
                 {/* Advice */}
                 {formData.advice ? (
-                    <Text style={[s.paperSmall, { marginTop: spacing.lg }]}>
-                        <Text style={s.paperBold}>Advice: </Text>
+                    <ThemedText color="primary" size="sm" style={[s.paperSmall, { marginTop: spacing.lg }]}>
+                        <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Advice: </ThemedText>
                         {formData.advice}
-                    </Text>
+                    </ThemedText>
                 ) : null}
 
                 {/* Follow-up */}
                 {formData.followUpDate ? (
-                    <Text style={[s.paperSmall, { marginTop: spacing.sm }]}>
-                        <Text style={s.paperBold}>Follow-up: </Text>
+                    <ThemedText color="primary" size="sm" style={[s.paperSmall, { marginTop: spacing.sm }]}>
+                        <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Follow-up: </ThemedText>
                         {formData.followUpDate}
-                    </Text>
+                    </ThemedText>
                 ) : null}
 
                 {/* Signature */}
                 <View style={s.signatureBlock}>
-                    <View style={s.signatureLine} />
-                    <Text style={s.signatureName}>{doctorName}</Text>
-                    <Text style={s.signatureQual}>{doctorLabel}</Text>
+                    <View style={[s.signatureLine, { backgroundColor: colors.borderLight }]} />
+                    <ThemedText color="primary" weight="semiBold" size="sm" style={s.signatureName}>{doctorName}</ThemedText>
+                    <ThemedText color="muted" size="xs" style={s.signatureQual}>{doctorLabel}</ThemedText>
                 </View>
 
                 {/* Disclaimer */}
-                <View style={s.paperFooter}>
-                    <Text style={s.paperDisclaimer}>
+                <View style={[s.paperFooter, { borderTopColor: colors.borderLight }]}>
+                    <ThemedText color="muted" size="xs" style={s.paperDisclaimer}>
                         This prescription is digitally generated. Valid for 30 days from issue date.
-                    </Text>
+                    </ThemedText>
                 </View>
             </View>
         </ScrollView>
@@ -532,6 +538,7 @@ function PreviewTab({
 // ─── Follow-Up Time Picker ──────────────────────────────────────────────────
 
 function FollowUpTimePicker({ value, onChange }: { value: string; onChange: (val: string) => void }) {
+    const { colors } = useTheme();
     const [hours, minutes] = value.split(':').map(Number);
     const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -546,37 +553,37 @@ function FollowUpTimePicker({ value, onChange }: { value: string; onChange: (val
 
     return (
         <View style={{ marginTop: spacing.md, marginBottom: spacing.lg }}>
-            <Text style={[s.fieldLabel, { marginBottom: spacing.sm }]}>Follow-up Time</Text>
+            <ThemedText color="primary" weight="medium" size="sm" style={[s.fieldLabel, { marginBottom: spacing.sm }]}>Follow-up Time</ThemedText>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                 {/* Hours */}
                 <View style={{ alignItems: 'center' }}>
                     <Pressable onPress={() => setH(hours + 1)} hitSlop={6}>
-                        <Feather name="chevron-up" size={18} color={doctorColors.textMuted} />
+                        <Feather name="chevron-up" size={18} color={colors.textMuted} />
                     </Pressable>
-                    <View style={timePickerStyles.cell}>
-                        <Text style={timePickerStyles.cellText}>{pad(hours)}</Text>
+                    <View style={[timePickerStyles.cell, { borderColor: colors.borderLight, backgroundColor: colors.surface }]}>
+                        <ThemedText color="primary" weight="medium" size="base" style={timePickerStyles.cellText}>{pad(hours)}</ThemedText>
                     </View>
                     <Pressable onPress={() => setH(hours - 1)} hitSlop={6}>
-                        <Feather name="chevron-down" size={18} color={doctorColors.textMuted} />
+                        <Feather name="chevron-down" size={18} color={colors.textMuted} />
                     </Pressable>
                 </View>
 
-                <Text style={{ fontFamily: typography.fontFamily.bold, fontSize: 18, color: doctorColors.textMuted }}>:</Text>
+                <ThemedText color="muted" weight="bold" size="lg" style={{ fontSize: 18 }}>:</ThemedText>
 
                 {/* Minutes */}
                 <View style={{ alignItems: 'center' }}>
                     <Pressable onPress={() => setM(minutes + 1)} hitSlop={6}>
-                        <Feather name="chevron-up" size={18} color={doctorColors.textMuted} />
+                        <Feather name="chevron-up" size={18} color={colors.textMuted} />
                     </Pressable>
-                    <View style={timePickerStyles.cell}>
-                        <Text style={timePickerStyles.cellText}>{pad(minutes)}</Text>
+                    <View style={[timePickerStyles.cell, { borderColor: colors.borderLight, backgroundColor: colors.surface }]}>
+                        <ThemedText color="primary" weight="medium" size="base" style={timePickerStyles.cellText}>{pad(minutes)}</ThemedText>
                     </View>
                     <Pressable onPress={() => setM(minutes - 1)} hitSlop={6}>
-                        <Feather name="chevron-down" size={18} color={doctorColors.textMuted} />
+                        <Feather name="chevron-down" size={18} color={colors.textMuted} />
                     </Pressable>
                 </View>
 
-                <Text style={{ fontFamily: typography.fontFamily.regular, ...typography.size.sm, color: doctorColors.textMuted, marginLeft: spacing.xs }}>hrs</Text>
+                <ThemedText color="muted" size="sm" style={{ marginLeft: spacing.xs }}>hrs</ThemedText>
             </View>
         </View>
     );
@@ -615,6 +622,7 @@ function SlotPickerOverlay({
     onSelect: (slot: AvailableSlot) => void;
     onSkip: () => void;
 }) {
+    const { colors } = useTheme();
     const [selected, setSelected] = useState<string | null>(null);
 
     const fmtDate = new Date(date).toLocaleDateString('en-IN', {
@@ -624,38 +632,38 @@ function SlotPickerOverlay({
     return (
         <Modal transparent animationType="fade" visible>
             <View style={slotStyles.overlay}>
-                <View style={slotStyles.card}>
+                <View style={[slotStyles.card, { backgroundColor: colors.surface }]}>
                     {/* Header */}
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm }}>
                         <View style={slotStyles.warningIcon}>
                             <Feather name="alert-circle" size={20} color="#D97706" />
                         </View>
                         <View style={{ flex: 1 }}>
-                            <Text style={slotStyles.title}>Time Slot Unavailable</Text>
-                            <Text style={slotStyles.subtitle}>The selected time is already booked</Text>
+                            <ThemedText color="primary" weight="bold" size="base" style={slotStyles.title}>Time Slot Unavailable</ThemedText>
+                            <ThemedText color="muted" size="xs" style={slotStyles.subtitle}>The selected time is already booked</ThemedText>
                         </View>
                     </View>
 
                     {/* Date badge */}
-                    <View style={slotStyles.dateBadge}>
-                        <Feather name="calendar" size={14} color={doctorColors.textMuted} />
-                        <Text style={slotStyles.dateText}>{fmtDate}</Text>
+                    <View style={[slotStyles.dateBadge, { backgroundColor: colors.surfaceMuted }]}>
+                        <Feather name="calendar" size={14} color={colors.textMuted} />
+                        <ThemedText color="secondary" size="sm" style={slotStyles.dateText}>{fmtDate}</ThemedText>
                     </View>
 
                     {/* Slots */}
                     {loading ? (
                         <View style={{ paddingVertical: spacing['4xl'], alignItems: 'center' }}>
-                            <ActivityIndicator size="small" color={doctorColors.primary} />
-                            <Text style={{ color: doctorColors.textMuted, marginTop: spacing.sm, ...typography.size.sm }}>Loading available slots…</Text>
+                            <ActivityIndicator size="small" color={colors.primary} />
+                            <ThemedText color="muted" size="sm" style={{ marginTop: spacing.sm }}>Loading available slots…</ThemedText>
                         </View>
                     ) : slots.length === 0 ? (
                         <View style={{ paddingVertical: spacing['4xl'], alignItems: 'center' }}>
-                            <Feather name="clock" size={28} color={doctorColors.borderLight} />
-                            <Text style={{ color: doctorColors.textMuted, marginTop: spacing.sm, ...typography.size.sm }}>No available slots on this day.</Text>
+                            <Feather name="clock" size={28} color={colors.borderLight} />
+                            <ThemedText color="muted" size="sm" style={{ marginTop: spacing.sm }}>No available slots on this day.</ThemedText>
                         </View>
                     ) : (
                         <>
-                            <Text style={{ ...typography.size.xs, fontFamily: typography.fontFamily.medium, color: doctorColors.textMuted, marginBottom: spacing.sm }}>Available Slots</Text>
+                            <ThemedText color="muted" weight="medium" size="xs" style={{ marginBottom: spacing.sm }}>Available Slots</ThemedText>
                             <View style={slotStyles.grid}>
                                 {slots.map((slot) => (
                                     <Pressable
@@ -663,13 +671,14 @@ function SlotPickerOverlay({
                                         onPress={() => setSelected(slot.start_time)}
                                         style={[
                                             slotStyles.slotBtn,
-                                            selected === slot.start_time && slotStyles.slotBtnActive,
+                                            { borderColor: colors.borderLight, backgroundColor: colors.surface },
+                                            selected === slot.start_time && [slotStyles.slotBtnActive, { backgroundColor: colors.primary, borderColor: colors.primary }],
                                         ]}
                                     >
-                                        <Text style={[
+                                        <ThemedText weight="medium" size="xs" style={[
                                             slotStyles.slotText,
-                                            selected === slot.start_time && slotStyles.slotTextActive,
-                                        ]}>{slot.start_time}</Text>
+                                            selected === slot.start_time ? slotStyles.slotTextActive : { color: colors.textPrimary },
+                                        ]}>{slot.start_time}</ThemedText>
                                     </Pressable>
                                 ))}
                             </View>
@@ -678,8 +687,8 @@ function SlotPickerOverlay({
 
                     {/* Actions */}
                     <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.xl }}>
-                        <Pressable onPress={onSkip} style={({ pressed }) => [slotStyles.skipBtn, pressed && { opacity: 0.7 }]}>
-                            <Text style={slotStyles.skipText}>Skip</Text>
+                        <Pressable onPress={onSkip} style={({ pressed }) => [slotStyles.skipBtn, { borderColor: colors.borderLight }, pressed && { opacity: 0.7 }]}>
+                            <ThemedText color="primary" weight="medium" size="sm" style={slotStyles.skipText}>Skip</ThemedText>
                         </Pressable>
                         {slots.length > 0 && (
                             <Pressable
@@ -690,12 +699,13 @@ function SlotPickerOverlay({
                                 disabled={!selected}
                                 style={({ pressed }) => [
                                     slotStyles.bookBtn,
+                                    { backgroundColor: colors.primary },
                                     !selected && { opacity: 0.4 },
                                     pressed && { opacity: 0.7 },
                                 ]}
                             >
                                 <Feather name="calendar" size={14} color="#fff" />
-                                <Text style={slotStyles.bookText}>Book Follow-Up</Text>
+                                <ThemedText weight="semiBold" size="sm" style={slotStyles.bookText}>Book Follow-Up</ThemedText>
                             </Pressable>
                         )}
                     </View>
@@ -735,6 +745,7 @@ export default function NewPrescriptionModal({
     patientGender = '',
     onPrescriptionCreated,
 }: NewPrescriptionModalProps) {
+    const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const { panHandlers, animatedStyle } = useSwipeDown(onClose);
     const { token } = useAuth();
@@ -950,24 +961,24 @@ export default function NewPrescriptionModal({
                 <Pressable style={s.backdrop} onPress={onClose} />
 
                 {/* Sheet */}
-                <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom }]}>
+                <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom, backgroundColor: colors.surface }]}>
                     {/* Handle */}
                     <View style={s.handleRow} {...panHandlers}>
-                        <View style={s.handle} />
+                        <View style={[s.handle, { backgroundColor: colors.border }]} />
                     </View>
 
                     {/* Header */}
                     <View style={s.header}>
                         <View>
-                            <Text style={s.headerTitle}>Create Prescription</Text>
-                            <Text style={s.headerSubtitle}>
+                            <ThemedText color="primary" weight="bold" size="xl" style={s.headerTitle}>Create Prescription</ThemedText>
+                            <ThemedText color="muted" size="xs" style={s.headerSubtitle}>
                                 Fill in the details. Signature & date added automatically.
-                            </Text>
+                            </ThemedText>
                         </View>
                     </View>
 
                     {/* Segmented Control */}
-                    <View style={s.segmentRow}>
+                    <View style={[s.segmentRow, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderLight }]}>
                         {([
                             { id: 'edit' as TabId, label: 'Edit Form', icon: 'edit-3' as const },
                             { id: 'preview' as TabId, label: 'Preview', icon: 'eye' as const },
@@ -977,16 +988,16 @@ export default function NewPrescriptionModal({
                                 <Pressable
                                     key={tab.id}
                                     onPress={() => setActiveTab(tab.id)}
-                                    style={[s.segmentBtn, active && s.segmentBtnActive]}
+                                    style={[s.segmentBtn, active && [s.segmentBtnActive, { backgroundColor: colors.surface, borderColor: colors.borderLight, shadowColor: colors.textPrimary }]]}
                                 >
                                     <Feather
                                         name={tab.icon}
                                         size={14}
-                                        color={active ? '#fff' : doctorColors.textMuted}
+                                        color={active ? colors.primary : colors.textMuted}
                                     />
-                                    <Text style={[s.segmentText, active && s.segmentTextActive]}>
+                                    <ThemedText weight={active ? "semiBold" : "medium"} size="sm" style={[s.segmentText, active ? [s.segmentTextActive, { color: colors.primary }] : { color: colors.textSecondary }]}>
                                         {tab.label}
-                                    </Text>
+                                    </ThemedText>
                                 </Pressable>
                             );
                         })}
@@ -1007,15 +1018,15 @@ export default function NewPrescriptionModal({
                     )}
 
                     {/* Footer */}
-                    <View style={s.footer}>
+                    <View style={[s.footer, { borderTopColor: colors.borderLight, backgroundColor: colors.surface }]}>
                         {showSuccess ? (
                             <>
                                 <Pressable
                                     onPress={handleWhatsApp}
-                                    style={({ pressed }) => [s.footerOutline, pressed && { opacity: 0.7 }]}
+                                    style={({ pressed }) => [s.footerOutline, { borderColor: colors.border }, pressed && { opacity: 0.7 }]}
                                 >
-                                    <Feather name="message-circle" size={15} color={doctorColors.primary} />
-                                    <Text style={[s.footerOutlineText, { color: doctorColors.primary }]}>WhatsApp</Text>
+                                    <Feather name="message-circle" size={15} color={colors.primary} />
+                                    <ThemedText color="brand" weight="medium" size="sm" style={[s.footerOutlineText, { color: colors.primary }]}>WhatsApp</ThemedText>
                                 </Pressable>
                                 <Pressable
                                     onPress={() => {
@@ -1027,28 +1038,30 @@ export default function NewPrescriptionModal({
                                     }}
                                     style={({ pressed }) => [
                                         s.footerPrimary,
-                                        pressed && { backgroundColor: doctorColors.primaryDark },
+                                        { backgroundColor: colors.primary },
+                                        pressed && { backgroundColor: colors.primaryDark },
                                     ]}
                                 >
                                     <Feather name="download" size={15} color="#fff" />
-                                    <Text style={s.footerPrimaryText}>Download PDF</Text>
+                                    <ThemedText weight="semiBold" size="sm" style={s.footerPrimaryText}>Download PDF</ThemedText>
                                 </Pressable>
                             </>
                         ) : (
                             <>
                                 <Pressable
                                     onPress={onClose}
-                                    style={({ pressed }) => [s.footerOutline, pressed && { opacity: 0.7 }]}
+                                    style={({ pressed }) => [s.footerOutline, { borderColor: colors.border }, pressed && { opacity: 0.7 }]}
                                 >
-                                    <Text style={s.footerOutlineText}>Close</Text>
+                                    <ThemedText weight="medium" size="sm" style={[s.footerOutlineText, { color: colors.textPrimary }]}>Close</ThemedText>
                                 </Pressable>
                                 <Pressable
                                     onPress={handleSaveAndSend}
                                     disabled={isSaving}
                                     style={({ pressed }) => [
                                         s.footerPrimary,
+                                        { backgroundColor: colors.primary },
                                         isSaving && { opacity: 0.6 },
-                                        pressed && { backgroundColor: doctorColors.primaryDark },
+                                        pressed && { backgroundColor: colors.primaryDark },
                                     ]}
                                 >
                                     {isSaving ? (
@@ -1056,7 +1069,7 @@ export default function NewPrescriptionModal({
                                     ) : (
                                         <>
                                             <Feather name="check" size={15} color="#fff" />
-                                            <Text style={s.footerPrimaryText}>Save & Preview</Text>
+                                            <ThemedText weight="semiBold" size="sm" style={s.footerPrimaryText}>Save & Preview</ThemedText>
                                         </>
                                     )}
                                 </Pressable>
@@ -1106,13 +1119,12 @@ const s = StyleSheet.create({
         left: 0,
         right: 0,
         height: SCREEN_HEIGHT * 0.93,
-        backgroundColor: doctorColors.surface,
         borderTopLeftRadius: radii.xl,
         borderTopRightRadius: radii.xl,
         ...shadows.elevated,
     },
     handleRow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
-    handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: doctorColors.border },
+    handle: { width: 40, height: 4, borderRadius: 2 },
 
     // Header
     header: {
@@ -1123,14 +1135,8 @@ const s = StyleSheet.create({
         paddingVertical: spacing.lg,
     },
     headerTitle: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size.xl,
-        color: doctorColors.textPrimary,
     },
     headerSubtitle: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.xs,
-        color: doctorColors.textMuted,
         marginTop: spacing.xxs,
     },
 
@@ -1139,10 +1145,10 @@ const s = StyleSheet.create({
     segmentRow: {
         flexDirection: 'row',
         marginHorizontal: spacing.xl,
-        backgroundColor: doctorColors.surfaceMuted,
         borderRadius: radii.md,
         padding: spacing.xxs,
         marginBottom: spacing.md,
+        borderWidth: 1,
     },
     segmentBtn: {
         flex: 1,
@@ -1154,17 +1160,12 @@ const s = StyleSheet.create({
         borderRadius: radii.sm,
     },
     segmentBtnActive: {
-        backgroundColor: doctorColors.primary,
+        borderWidth: 1,
         ...shadows.card,
     },
     segmentText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
     },
     segmentTextActive: {
-        color: '#fff',
-        fontFamily: typography.fontFamily.semiBold,
     },
 
     // Tab ScrollView
@@ -1173,9 +1174,6 @@ const s = StyleSheet.create({
 
     // Section Label
     sectionLabel: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
         letterSpacing: 0.4,
         textTransform: 'uppercase',
         marginBottom: spacing.md,
@@ -1184,21 +1182,13 @@ const s = StyleSheet.create({
     // Form fields
     fieldGroup: { marginBottom: spacing.lg },
     fieldLabel: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.textSecondary,
         marginBottom: spacing.xs,
     },
     input: {
         borderWidth: 1,
-        borderColor: doctorColors.borderLight,
         borderRadius: radii.md,
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.md,
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
-        backgroundColor: doctorColors.surface,
     },
     inputMultiline: {
         minHeight: 64,
@@ -1220,15 +1210,11 @@ const s = StyleSheet.create({
         minWidth: '45%',
     },
     vitalLabel: {
-        fontFamily: typography.fontFamily.regular,
-        fontSize: 10,
-        color: doctorColors.textMuted,
         marginBottom: spacing.xxs,
     },
     smallFieldGroup: { flex: 1 },
     separator: {
         height: 1,
-        backgroundColor: doctorColors.borderLight,
         marginVertical: spacing.xl,
     },
 
@@ -1247,19 +1233,13 @@ const s = StyleSheet.create({
         paddingVertical: spacing.sm,
         borderRadius: radii.md,
         borderWidth: 1,
-        borderColor: doctorColors.borderLight,
     },
     addBtnText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.primary,
     },
     medCard: {
         padding: spacing.md,
         borderWidth: 1,
-        borderColor: doctorColors.borderLight,
         borderRadius: radii.md,
-        backgroundColor: doctorColors.surfaceMuted,
         marginBottom: spacing.md,
         gap: spacing.sm,
     },
@@ -1269,9 +1249,6 @@ const s = StyleSheet.create({
         justifyContent: 'space-between',
     },
     medCardTitle: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
     },
     medGrid: {
         flexDirection: 'row',
@@ -1291,19 +1268,14 @@ const s = StyleSheet.create({
         paddingHorizontal: spacing.xl,
         paddingVertical: spacing.lg,
         borderTopWidth: 1,
-        borderTopColor: doctorColors.borderLight,
     },
     footerOutline: {
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.xl,
         borderRadius: radii.md,
         borderWidth: 1,
-        borderColor: doctorColors.border,
     },
     footerOutlineText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
     },
     footerPrimary: {
         flexDirection: 'row',
@@ -1312,17 +1284,13 @@ const s = StyleSheet.create({
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.xl,
         borderRadius: radii.md,
-        backgroundColor: doctorColors.primary,
     },
     footerPrimaryText: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
         color: '#FFFFFF',
     },
 
     // ─── Preview (Rx Paper) ─────────────────────────────────────────────
     paper: {
-        backgroundColor: '#FFFFFF',
         borderRadius: radii.md,
         padding: spacing.xl,
         borderWidth: 1,
@@ -1331,57 +1299,39 @@ const s = StyleSheet.create({
     },
     paperHeader: {
         alignItems: 'center',
-        borderBottomWidth: 2,
-        borderBottomColor: doctorColors.primary,
+        borderBottomWidth: 1,
         paddingBottom: spacing.lg,
         marginBottom: spacing.lg,
     },
     paperDoctorName: {
-        fontFamily: typography.fontFamily.bold,
-        fontSize: 20,
-        color: doctorColors.primary,
     },
     paperSubtext: {
-        fontFamily: typography.fontFamily.regular,
-        fontSize: 11,
-        color: doctorColors.textMuted,
         marginTop: 2,
     },
     paperClinic: {
-        fontFamily: typography.fontFamily.medium,
-        fontSize: 12,
-        color: doctorColors.textPrimary,
     },
 
     paperPatientBar: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        backgroundColor: '#F7FAFC',
         borderRadius: radii.sm,
         padding: spacing.md,
         marginBottom: spacing.md,
+        borderWidth: 1,
     },
     paperSmall: {
-        fontFamily: typography.fontFamily.regular,
-        fontSize: 12,
-        color: doctorColors.textSecondary,
     },
     paperBold: {
-        fontFamily: typography.fontFamily.semiBold,
-        color: doctorColors.textPrimary,
     },
 
     rxSymbol: {
-        fontFamily: typography.fontFamily.bold,
         fontSize: 28,
-        color: doctorColors.primary,
         marginBottom: spacing.md,
     },
 
     // Medications table
     medTable: {
         borderWidth: 1,
-        borderColor: '#E2E8F0',
         borderRadius: radii.sm,
         overflow: 'hidden',
         marginBottom: spacing.md,
@@ -1389,20 +1339,13 @@ const s = StyleSheet.create({
     medTableRow: {
         flexDirection: 'row',
         borderBottomWidth: 1,
-        borderBottomColor: '#E2E8F0',
     },
     medTableHeaderRow: {
-        backgroundColor: '#EDF2F7',
+        borderBottomWidth: 1,
     },
     medTableHeaderText: {
-        fontFamily: typography.fontFamily.semiBold,
-        fontSize: 11,
-        color: doctorColors.textPrimary,
     },
     medTableCell: {
-        fontFamily: typography.fontFamily.regular,
-        fontSize: 11,
-        color: doctorColors.textPrimary,
         paddingHorizontal: spacing.sm,
         paddingVertical: spacing.sm,
     },
@@ -1417,10 +1360,7 @@ const s = StyleSheet.create({
         flex: 1,
     },
     medTableInstructions: {
-        fontFamily: typography.fontFamily.regular,
-        fontSize: 10,
         fontStyle: 'italic',
-        color: doctorColors.textMuted,
         paddingHorizontal: spacing.sm,
         paddingBottom: spacing.xs,
     },
@@ -1433,20 +1373,13 @@ const s = StyleSheet.create({
     signatureLine: {
         width: 160,
         borderTopWidth: 1,
-        borderTopColor: doctorColors.textPrimary,
         marginTop: spacing['4xl'],
         paddingTop: spacing.xs,
     },
     signatureName: {
-        fontFamily: typography.fontFamily.semiBold,
-        fontSize: 12,
-        color: doctorColors.textPrimary,
         textAlign: 'right',
     },
     signatureQual: {
-        fontFamily: typography.fontFamily.regular,
-        fontSize: 11,
-        color: doctorColors.textMuted,
         textAlign: 'right',
     },
 

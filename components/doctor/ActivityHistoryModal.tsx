@@ -21,11 +21,11 @@ import useSwipeDown from '@/hooks/useSwipeDown';
 import { Feather } from '@expo/vector-icons';
 import {
     spacing,
-    doctorColors,
-    typography,
     shadows,
     radii,
 } from '@/constants/theme';
+import { useTheme } from '@/providers/ThemeProvider';
+import { ThemedText, ThemedView } from '@/components/shared/Themed';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -101,6 +101,7 @@ const recentActivity: ActivityItem[] = [
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function ActivityHistoryModal({ visible, onClose }: ActivityHistoryModalProps) {
+    const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const { panHandlers, animatedStyle } = useSwipeDown(onClose);
 
@@ -115,19 +116,19 @@ export default function ActivityHistoryModal({ visible, onClose }: ActivityHisto
             <Pressable style={s.backdrop} onPress={onClose} />
 
             {/* Sheet */}
-            <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom }]}>
+            <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom, backgroundColor: colors.surface }]}>
                 {/* Handle */}
                 <View style={s.handleRow} {...panHandlers}>
-                    <View style={s.handle} />
+                    <View style={[s.handle, { backgroundColor: colors.border }]} />
                 </View>
 
                 {/* Header */}
                 <View style={s.header}>
                     <View>
-                        <Text style={s.headerTitle}>Recent Activity</Text>
-                        <Text style={s.headerSubtitle}>
+                        <ThemedText color="primary" weight="bold" size="xl" style={s.headerTitle}>Recent Activity</ThemedText>
+                        <ThemedText color="muted" size="xs" style={s.headerSubtitle}>
                             Your actions and events from the past week
-                        </Text>
+                        </ThemedText>
                     </View>
                 </View>
 
@@ -142,26 +143,26 @@ export default function ActivityHistoryModal({ visible, onClose }: ActivityHisto
                             key={item.id}
                             style={[
                                 s.activityRow,
-                                index < recentActivity.length - 1 && s.activityRowBorder,
+                                index < recentActivity.length - 1 && [s.activityRowBorder, { borderBottomColor: colors.borderLight }],
                             ]}
                         >
                             {/* Icon circle */}
-                            <View style={s.iconCircle}>
+                            <View style={[s.iconCircle, { backgroundColor: colors.surfaceMuted }]}>
                                 <Feather
                                     name={item.icon}
                                     size={18}
-                                    color={doctorColors.primary}
+                                    color={colors.primary}
                                 />
                             </View>
 
                             {/* Text block */}
                             <View style={s.textBlock}>
-                                <Text style={s.activityTitle}>{item.title}</Text>
-                                <Text style={s.activityDesc}>{item.desc}</Text>
+                                <ThemedText weight="semiBold" size="sm" style={s.activityTitle}>{item.title}</ThemedText>
+                                <ThemedText color="muted" size="xs" style={s.activityDesc}>{item.desc}</ThemedText>
                             </View>
 
                             {/* Time */}
-                            <Text style={s.activityTime}>{item.time}</Text>
+                            <ThemedText color="muted" size="xs" style={s.activityTime}>{item.time}</ThemedText>
                         </View>
                     ))}
                 </ScrollView>
@@ -181,7 +182,6 @@ const s = StyleSheet.create({
         left: 0,
         right: 0,
         height: SCREEN_HEIGHT * 0.90,
-        backgroundColor: doctorColors.surface,
         borderTopLeftRadius: radii.xl,
         borderTopRightRadius: radii.xl,
         ...shadows.elevated,
@@ -195,7 +195,6 @@ const s = StyleSheet.create({
         width: 40,
         height: 4,
         borderRadius: 2,
-        backgroundColor: doctorColors.border,
     },
 
     // Header
@@ -207,14 +206,8 @@ const s = StyleSheet.create({
         paddingVertical: spacing.lg,
     },
     headerTitle: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size.xl,
-        color: doctorColors.textPrimary,
     },
     headerSubtitle: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.xs,
-        color: doctorColors.textMuted,
         marginTop: spacing.xxs,
     },
 
@@ -235,7 +228,6 @@ const s = StyleSheet.create({
     },
     activityRowBorder: {
         borderBottomWidth: 1,
-        borderBottomColor: doctorColors.borderLight,
     },
 
     // Icon
@@ -243,7 +235,6 @@ const s = StyleSheet.create({
         width: 42,
         height: 42,
         borderRadius: 21,
-        backgroundColor: doctorColors.surfaceMuted,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -254,20 +245,11 @@ const s = StyleSheet.create({
         gap: spacing.xxs,
     },
     activityTitle: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
     },
     activityDesc: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.xs,
-        color: doctorColors.textMuted,
     },
 
     // Time
     activityTime: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.xs,
-        color: doctorColors.textMuted,
     },
 });

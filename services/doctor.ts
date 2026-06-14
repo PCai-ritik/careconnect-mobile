@@ -242,7 +242,7 @@ export async function getMe(
 ): Promise<import('./types').MeResponse> {
     return apiRequest<import('./types').MeResponse>({
         method: 'GET',
-        path: '/auth/me',
+        path: '/api/me',
         token,
     });
 }

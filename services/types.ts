@@ -230,4 +230,5 @@ export interface MeResponse {
     full_name: string;
     role: string;
     hospital_id: string;
+    affiliation_status?: 'PENDING' | 'APPROVED' | 'REJECTED';
 }

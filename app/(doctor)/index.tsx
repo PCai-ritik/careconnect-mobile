@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-import { View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator, RefreshControl, Linking, Alert } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator, RefreshControl, Linking, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -17,6 +17,7 @@ import {
     typography,
     shadows,
     radii,
+    getBranding,
 } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { getDoctorProfile, getAppointments, getPatients, startVideoSession, getJoinToken } from '@/services/doctor';
@@ -27,6 +28,8 @@ import AvailabilityModal from '@/components/doctor/AvailabilityModal';
 import ActivityHistoryModal from '@/components/doctor/ActivityHistoryModal';
 import AddPatientModal from '@/components/doctor/AddPatientModal';
 import SmartJoinButton from '@/components/SmartJoinButton';
+import { ThemedText, ThemedView } from '@/components/shared/Themed';
+import { useTheme } from '@/providers/ThemeProvider';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -113,15 +116,15 @@ function Avatar({ name, size = 44 }: { name: string; size?: number }) {
 
 function HeroCard({ appointment, onStartCall, onShare }: { appointment: DisplayAppointment; onStartCall: () => void; onShare: () => void }) {
     return (
-        <View style={styles.heroCard}>
-            <Text style={styles.heroLabel}>NEXT APPOINTMENT</Text>
+        <ThemedView bg="surface" rounded style={styles.heroCard}>
+            <ThemedText color="muted" weight="semiBold" size="xs" style={styles.heroLabel}>NEXT APPOINTMENT</ThemedText>
             <View style={styles.heroBody}>
                 <Avatar name={appointment.patientName} size={52} />
                 <View style={styles.heroInfo}>
-                    <Text style={styles.heroPatient}>{appointment.patientName}</Text>
-                    <Text style={styles.heroMeta}>
+                    <ThemedText color="primary" weight="bold" size="xl" style={styles.heroPatient}>{appointment.patientName}</ThemedText>
+                    <ThemedText color="secondary" size="sm" style={styles.heroMeta}>
                         {appointment.displayTime}  •  {appointment.displayType}
-                    </Text>
+                    </ThemedText>
                 </View>
             </View>
             <View style={{ flexDirection: 'row', gap: spacing.sm }}>
@@ -143,11 +146,12 @@ function HeroCard({ appointment, onStartCall, onShare }: { appointment: DisplayA
                     style={{ flex: 1 }}
                 />
             </View>
-        </View>
+        </ThemedView>
     );
 }
 
 function ActionPill({ action, onPress }: { action: QuickAction; onPress?: () => void }) {
+    const { colors } = useTheme();
     return (
         <Pressable
             style={({ pressed }) => [
@@ -156,15 +160,16 @@ function ActionPill({ action, onPress }: { action: QuickAction; onPress?: () => 
             ]}
             onPress={onPress}
         >
-            <View style={styles.actionPillIcon}>
-                <Feather name={action.icon} size={20} color={doctorColors.primary} />
+            <View style={[styles.actionPillIcon, { backgroundColor: colors.primaryLight }]}>
+                <Feather name={action.icon} size={20} color={colors.primary} />
             </View>
-            <Text style={styles.actionPillLabel}>{action.label}</Text>
+            <ThemedText color="secondary" weight="medium" size="xs" style={styles.actionPillLabel}>{action.label}</ThemedText>
         </Pressable>
     );
 }
 
 function ScheduleRow({ appointment, onPress, onJoin, onShare }: { appointment: DisplayAppointment; onPress: () => void; onJoin: () => void; onShare: () => void }) {
+    const { colors } = useTheme();
     return (
         <Pressable
             style={({ pressed }) => [
@@ -175,19 +180,20 @@ function ScheduleRow({ appointment, onPress, onJoin, onShare }: { appointment: D
         >
             <Avatar name={appointment.patientName} size={40} />
             <View style={styles.scheduleInfo}>
-                <Text style={styles.scheduleName}>{appointment.patientName}</Text>
-                <Text style={styles.scheduleMeta}>
+                <ThemedText color="primary" weight="semiBold" size="base" style={styles.scheduleName}>{appointment.patientName}</ThemedText>
+                <ThemedText color="muted" size="sm" style={styles.scheduleMeta}>
                     {appointment.displayTime}  •  {appointment.displayType}
-                </Text>
+                </ThemedText>
             </View>
             <Pressable
                 style={({ pressed }) => [
                     styles.shareBtn,
+                    { borderColor: colors.border, backgroundColor: colors.surface },
                     pressed && { opacity: 0.7 },
                 ]}
                 onPress={onShare}
             >
-                <Feather name="share-2" size={14} color={doctorColors.textMuted} />
+                <Feather name="share-2" size={14} color={colors.textMuted} />
             </Pressable>
             <SmartJoinButton
                 scheduledTime={appointment.scheduled_time}
@@ -213,12 +219,12 @@ function PatientRow({ patient, onPress }: { patient: PatientProfile; onPress: ()
         >
             <Avatar name={patient.full_name} size={40} />
             <View style={styles.patientInfo}>
-                <Text style={styles.patientName}>{patient.full_name}</Text>
-                <Text style={styles.patientCondition}>{condition}</Text>
+                <ThemedText color="primary" weight="semiBold" size="base" style={styles.patientName}>{patient.full_name}</ThemedText>
+                <ThemedText color="muted" size="sm" style={styles.patientCondition}>{condition}</ThemedText>
             </View>
-            <Text style={styles.patientLastVisit}>
+            <ThemedText color="muted" size="xs" style={styles.patientLastVisit}>
                 {new Date(patient.created_at).toLocaleDateString()}
-            </Text>
+            </ThemedText>
         </Pressable>
     );
 }
@@ -228,6 +234,7 @@ function PatientRow({ patient, onPress }: { patient: PatientProfile; onPress: ()
 export default function DoctorHomeScreen() {
     const router = useRouter();
     const { token } = useAuth();
+    const { colors } = useTheme();
     const [selectedPatient, setSelectedPatient] = useState<PatientProfile | null>(null);
     const [isChartOpen, setIsChartOpen] = useState(false);
     const [isRxOpen, setIsRxOpen] = useState(false);
@@ -316,9 +323,8 @@ export default function DoctorHomeScreen() {
         const found = patients.find((p) => p.id === appt.patient_id);
         if (found) openChart(found);
     };
-
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
@@ -326,19 +332,23 @@ export default function DoctorHomeScreen() {
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        tintColor={doctorColors.primary}
+                        tintColor={colors.primary}
                     />
                 }
             >
                 {/* ── Header ─────────────────────────────────────────── */}
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
-                        <View style={styles.logoBox}>
-                            <Feather name="activity" size={20} color="#fff" />
-                        </View>
+                        {getBranding().logoUrl ? (
+                            <Image source={{ uri: getBranding().logoUrl as string }} style={styles.logoImage} resizeMode="contain" />
+                        ) : (
+                            <View style={[styles.logoBox, { backgroundColor: colors.primary }]}>
+                                <Feather name="activity" size={20} color="#fff" />
+                            </View>
+                        )}
                         <View>
-                            <Text style={styles.greeting}>Welcome,</Text>
-                            <Text style={styles.doctorName}>{doctorName}</Text>
+                            <ThemedText color="secondary" size="sm" style={styles.greeting}>Welcome,</ThemedText>
+                            <ThemedText color="primary" weight="bold" size="lg" style={styles.doctorName}>{doctorName}</ThemedText>
                         </View>
                     </View>
                     <Avatar name={doctorName} size={42} />
@@ -346,7 +356,7 @@ export default function DoctorHomeScreen() {
 
                 {loading ? (
                     <View style={{ paddingVertical: spacing['6xl'], alignItems: 'center' }}>
-                        <ActivityIndicator size="large" color={doctorColors.primary} />
+                        <ActivityIndicator size="large" color={colors.primary} />
                     </View>
                 ) : (
                     <>
@@ -354,7 +364,7 @@ export default function DoctorHomeScreen() {
                         {nextAppointment && (
                             <HeroCard
                                 appointment={nextAppointment}
-                                onStartCall={() => router.push(`/(doctor)/consultation/${nextAppointment.id}`)}
+                                onStartCall={() => router.push(`/(doctor)/consultation/${nextAppointment.id}` as any)}
                                 onShare={() => shareToWhatsApp(nextAppointment.id)}
                             />
                         )}
@@ -383,22 +393,22 @@ export default function DoctorHomeScreen() {
                         {/* ── Today's Schedule ─────────────────────────────────── */}
                         <View style={styles.section}>
                             <View style={styles.sectionHeader}>
-                                <Text style={styles.sectionTitle}>Today&apos;s Schedule</Text>
+                                <ThemedText color="primary" weight="bold" size="lg" style={styles.sectionTitle}>Today's Schedule</ThemedText>
                                 {todaySchedule.length > 5 && (
                                     <Pressable
-                                        onPress={() => router.push('/(doctor)/appointments')}
+                                        onPress={() => router.push('/(doctor)/appointments' as any)}
                                         style={({ pressed }) => [pressed && { opacity: 0.6 }]}
                                     >
-                                        <Text style={styles.showMore}>Show More</Text>
+                                        <ThemedText color="brand" weight="medium" size="sm" style={styles.showMore}>Show More</ThemedText>
                                     </Pressable>
                                 )}
                             </View>
-                            <View style={styles.card}>
+                            <ThemedView bg="surface" rounded style={styles.card}>
                                 {todaySchedule.length === 0 ? (
                                     <View style={{ padding: spacing.xl, alignItems: 'center' }}>
-                                        <Text style={{ color: doctorColors.textMuted, fontFamily: typography.fontFamily.regular }}>
+                                        <ThemedText color="muted" weight="regular">
                                             No other appointments today
-                                        </Text>
+                                        </ThemedText>
                                     </View>
                                 ) : (
                                     todaySchedule.slice(0, 5).map((appt, idx, arr) => (
@@ -406,37 +416,37 @@ export default function DoctorHomeScreen() {
                                             <ScheduleRow
                                                 appointment={appt}
                                                 onPress={() => openChartFromAppointment(appt)}
-                                                onJoin={() => router.push(`/(doctor)/consultation/${appt.id}`)}
+                                                onJoin={() => router.push(`/(doctor)/consultation/${appt.id}` as any)}
                                                 onShare={() => shareToWhatsApp(appt.id)}
                                             />
                                             {idx < arr.length - 1 && (
-                                                <View style={styles.divider} />
+                                                <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
                                             )}
                                         </View>
                                     ))
                                 )}
-                            </View>
+                            </ThemedView>
                         </View>
 
                         {/* ── Recent Patients ──────────────────────────────────── */}
                         <View style={styles.section}>
                             <View style={styles.sectionHeader}>
-                                <Text style={styles.sectionTitle}>Recent Patients</Text>
+                                <ThemedText color="primary" weight="bold" size="lg" style={styles.sectionTitle}>Recent Patients</ThemedText>
                                 {patients.length > 5 && (
                                     <Pressable
-                                        onPress={() => router.push('/(doctor)/patients')}
+                                        onPress={() => router.push('/(doctor)/patients' as any)}
                                         style={({ pressed }) => [pressed && { opacity: 0.6 }]}
                                     >
-                                        <Text style={styles.showMore}>Show More</Text>
+                                        <ThemedText color="brand" weight="medium" size="sm" style={styles.showMore}>Show More</ThemedText>
                                     </Pressable>
                                 )}
                             </View>
-                            <View style={styles.card}>
+                            <ThemedView bg="surface" rounded style={styles.card}>
                                 {patients.length === 0 ? (
                                     <View style={{ padding: spacing.xl, alignItems: 'center' }}>
-                                        <Text style={{ color: doctorColors.textMuted, fontFamily: typography.fontFamily.regular }}>
+                                        <ThemedText color="muted" weight="regular">
                                             No patients yet
-                                        </Text>
+                                        </ThemedText>
                                     </View>
                                 ) : (
                                     patients.slice(0, 5).map((patient, idx, arr) => (
@@ -446,12 +456,12 @@ export default function DoctorHomeScreen() {
                                                 onPress={() => openChart(patient)}
                                             />
                                             {idx < arr.length - 1 && (
-                                                <View style={styles.divider} />
+                                                <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
                                             )}
                                         </View>
                                     ))
                                 )}
-                            </View>
+                            </ThemedView>
                         </View>
                     </>
                 )}
@@ -499,7 +509,6 @@ export default function DoctorHomeScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: doctorColors.background,
     },
     scrollContent: {
         paddingBottom: spacing.lg,
@@ -523,26 +532,22 @@ const styles = StyleSheet.create({
         width: 38,
         height: 38,
         borderRadius: radii.md,
-        backgroundColor: doctorColors.primary,
         alignItems: 'center',
         justifyContent: 'center',
     },
+    logoImage: {
+        width: 38,
+        height: 38,
+    },
     greeting: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textSecondary,
     },
     doctorName: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size.lg,
-        color: doctorColors.textPrimary,
     },
 
     // ── Avatar (shared)
     avatar: {
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: doctorColors.surfaceMuted,
     },
 
     // ── Hero Card
@@ -550,14 +555,9 @@ const styles = StyleSheet.create({
         marginHorizontal: spacing.xl,
         marginTop: spacing.sm,
         padding: spacing.xl,
-        backgroundColor: doctorColors.surface,
-        borderRadius: radii.lg,
         ...shadows.elevated,
     },
     heroLabel: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.xs,
-        color: doctorColors.textMuted,
         letterSpacing: 1.2,
         marginBottom: spacing.md,
     },
@@ -571,14 +571,9 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     heroPatient: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size.xl,
-        color: doctorColors.textPrimary,
+        // dynamic font/color handled by ThemedText
     },
     heroMeta: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textSecondary,
         marginTop: spacing.xxs,
     },
     heroCta: {
@@ -586,7 +581,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: spacing.sm,
-        backgroundColor: doctorColors.primary,
         borderRadius: radii.md,
         paddingVertical: spacing.md,
     },
@@ -596,16 +590,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         borderRadius: radii.md,
         borderWidth: 1,
-        borderColor: doctorColors.border,
-        backgroundColor: doctorColors.surface,
     },
     heroCtaPressed: {
-        backgroundColor: doctorColors.primaryDark,
     },
     heroCtaText: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
-        color: '#FFFFFF',
     },
 
     // ── Action Toolbox
@@ -624,14 +612,10 @@ const styles = StyleSheet.create({
         width: 52,
         height: 52,
         borderRadius: radii.lg,
-        backgroundColor: doctorColors.primaryLight,
         alignItems: 'center',
         justifyContent: 'center',
     },
     actionPillLabel: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.xs,
-        color: doctorColors.textSecondary,
         textAlign: 'center',
     },
 
@@ -641,9 +625,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.xl,
     },
     sectionTitle: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size.lg,
-        color: doctorColors.textPrimary,
     },
     sectionHeader: {
         flexDirection: 'row',
@@ -652,19 +633,13 @@ const styles = StyleSheet.create({
         marginBottom: spacing.md,
     },
     showMore: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.primary,
     },
     card: {
-        backgroundColor: doctorColors.surface,
-        borderRadius: radii.lg,
         padding: spacing.lg,
         ...shadows.card,
     },
     divider: {
         height: 1,
-        backgroundColor: doctorColors.borderLight,
         marginVertical: spacing.md,
     },
 
@@ -678,14 +653,8 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     scheduleName: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
-        color: doctorColors.textPrimary,
     },
     scheduleMeta: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
         marginTop: spacing.xxs,
     },
     shareBtn: {
@@ -695,8 +664,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         borderRadius: radii.sm,
         borderWidth: 1,
-        borderColor: doctorColors.border,
-        backgroundColor: doctorColors.surface,
     },
     joinBtn: {
         flexDirection: 'row',
@@ -706,12 +673,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.md,
         borderRadius: radii.sm,
         borderWidth: 1,
-        borderColor: doctorColors.primary,
     },
     joinBtnText: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
-        color: doctorColors.primary,
     },
 
     // ── Patient Row
@@ -724,19 +687,10 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     patientName: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
-        color: doctorColors.textPrimary,
     },
     patientCondition: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
         marginTop: spacing.xxs,
     },
     patientLastVisit: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.xs,
-        color: doctorColors.textMuted,
     },
 });

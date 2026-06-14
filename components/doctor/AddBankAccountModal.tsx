@@ -23,11 +23,11 @@ import useSwipeDown from '@/hooks/useSwipeDown';
 import { Feather } from '@expo/vector-icons';
 import {
     spacing,
-    doctorColors,
-    typography,
     shadows,
     radii,
 } from '@/constants/theme';
+import { useTheme } from '@/providers/ThemeProvider';
+import { ThemedText, ThemedView } from '@/components/shared/Themed';
 import ThemedAlert from '@/components/doctor/ThemedAlert';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -40,6 +40,7 @@ interface AddBankAccountModalProps {
 const ACCOUNT_TYPES = ['Savings', 'Checking'] as const;
 
 export default function AddBankAccountModal({ visible, onClose }: AddBankAccountModalProps) {
+    const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const { panHandlers, animatedStyle } = useSwipeDown(onClose);
     const [holderName, setHolderName] = useState('');
@@ -82,14 +83,14 @@ export default function AddBankAccountModal({ visible, onClose }: AddBankAccount
             >
                 <Pressable style={s.backdrop} onPress={onClose} />
 
-                <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom }]}>
+                <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom, backgroundColor: colors.surface }]}>
                     <View style={s.handleRow} {...panHandlers}>
-                        <View style={s.handle} />
+                        <View style={[s.handle, { backgroundColor: colors.border }]} />
                     </View>
 
                     {/* Header */}
                     <View style={s.header}>
-                        <Text style={s.headerTitle}>Add Bank Account</Text>
+                        <ThemedText color="primary" weight="bold" size="xl" style={s.headerTitle}>Add Bank Account</ThemedText>
                     </View>
 
                     <ScrollView
@@ -98,80 +99,82 @@ export default function AddBankAccountModal({ visible, onClose }: AddBankAccount
                         contentContainerStyle={s.scrollInner}
                         keyboardShouldPersistTaps="handled"
                     >
-                        <Text style={s.label}>Account Holder Name <Text style={s.req}>*</Text></Text>
+                        <ThemedText color="secondary" weight="semiBold" size="sm" style={s.label}>Account Holder Name <ThemedText color="brand" weight="semiBold" size="sm" style={{ color: "#EF4444" }}>*</ThemedText></ThemedText>
                         <TextInput
-                            style={s.input}
+                            style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={holderName}
                             onChangeText={setHolderName}
                             placeholder="Full name as on account"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                         />
 
-                        <Text style={s.label}>Bank Name <Text style={s.req}>*</Text></Text>
+                        <ThemedText color="secondary" weight="semiBold" size="sm" style={s.label}>Bank Name <ThemedText color="brand" weight="semiBold" size="sm" style={{ color: "#EF4444" }}>*</ThemedText></ThemedText>
                         <TextInput
-                            style={s.input}
+                            style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={bankName}
                             onChangeText={setBankName}
                             placeholder="e.g., First National Bank"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                         />
 
-                        <Text style={s.label}>Account Number <Text style={s.req}>*</Text></Text>
+                        <ThemedText color="secondary" weight="semiBold" size="sm" style={s.label}>Account Number <ThemedText color="brand" weight="semiBold" size="sm" style={{ color: "#EF4444" }}>*</ThemedText></ThemedText>
                         <TextInput
-                            style={s.input}
+                            style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={accountNumber}
                             onChangeText={setAccountNumber}
                             placeholder="Enter account number"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                             keyboardType="numeric"
                             secureTextEntry
                         />
 
-                        <Text style={s.label}>Confirm Account Number <Text style={s.req}>*</Text></Text>
+                        <ThemedText color="secondary" weight="semiBold" size="sm" style={s.label}>Confirm Account Number <ThemedText color="brand" weight="semiBold" size="sm" style={{ color: "#EF4444" }}>*</ThemedText></ThemedText>
                         <TextInput
                             style={[
                                 s.input,
+                                { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface },
                                 confirmAccount.length > 0 && confirmAccount !== accountNumber && s.inputError,
                             ]}
                             value={confirmAccount}
                             onChangeText={setConfirmAccount}
                             placeholder="Re-enter account number"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                             keyboardType="numeric"
                         />
                         {confirmAccount.length > 0 && confirmAccount !== accountNumber && (
-                            <Text style={s.errorText}>Account numbers do not match</Text>
+                            <ThemedText size="xs" weight="regular" style={s.errorText}>Account numbers do not match</ThemedText>
                         )}
 
-                        <Text style={s.label}>IFSC / Routing Code <Text style={s.req}>*</Text></Text>
+                        <ThemedText color="secondary" weight="semiBold" size="sm" style={s.label}>IFSC / Routing Code <ThemedText color="brand" weight="semiBold" size="sm" style={{ color: "#EF4444" }}>*</ThemedText></ThemedText>
                         <TextInput
-                            style={s.input}
+                            style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
                             value={ifscCode}
                             onChangeText={(t) => setIfscCode(t.toUpperCase())}
                             placeholder="e.g., SBIN0001234"
-                            placeholderTextColor={doctorColors.textMuted}
+                            placeholderTextColor={colors.textMuted}
                             autoCapitalize="characters"
                         />
 
-                        <Text style={s.label}>Account Type</Text>
+                        <ThemedText color="secondary" weight="semiBold" size="sm" style={s.label}>Account Type</ThemedText>
                         <View style={s.chipRow}>
                             {ACCOUNT_TYPES.map((t) => (
                                 <Pressable
                                     key={t}
-                                    style={[s.chip, accountType === t && s.chipActive]}
+                                    style={[s.chip, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderLight }, accountType === t && [s.chipActive, { backgroundColor: colors.primary, borderColor: colors.primary }]]}
                                     onPress={() => setAccountType(t)}
                                 >
-                                    <Text style={[s.chipText, accountType === t && s.chipTextActive]}>{t}</Text>
+                                    <ThemedText weight="medium" size="sm" style={[s.chipText, { color: colors.textSecondary }, accountType === t && s.chipTextActive]}>{t}</ThemedText>
                                 </Pressable>
                             ))}
                         </View>
                     </ScrollView>
 
                     {/* Footer */}
-                    <View style={s.footer}>
+                    <View style={[s.footer, { borderTopColor: colors.borderLight }]}>
                         <Pressable
                             style={({ pressed }) => [
                                 s.submitBtn,
+                                { backgroundColor: colors.primary },
                                 (!canSubmit || isSubmitting) && { opacity: 0.5 },
                                 pressed && { opacity: 0.85 },
                             ]}
@@ -183,7 +186,7 @@ export default function AddBankAccountModal({ visible, onClose }: AddBankAccount
                             ) : (
                                 <>
                                     <Feather name="plus" size={16} color="#fff" />
-                                    <Text style={s.submitBtnText}>Add Account</Text>
+                                    <ThemedText weight="semiBold" size="base" style={s.submitBtnText}>Add Account</ThemedText>
                                 </>
                             )}
                         </Pressable>
@@ -216,13 +219,12 @@ const s = StyleSheet.create({
         left: 0,
         right: 0,
         height: SCREEN_HEIGHT * 0.85,
-        backgroundColor: doctorColors.surface,
         borderTopLeftRadius: radii.xl,
         borderTopRightRadius: radii.xl,
         ...shadows.elevated,
     },
     handleRow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
-    handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: doctorColors.border },
+    handle: { width: 40, height: 4, borderRadius: 2 },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -231,31 +233,20 @@ const s = StyleSheet.create({
         paddingVertical: spacing.lg,
     },
     headerTitle: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size.xl,
-        color: doctorColors.textPrimary,
     },
 
     scrollArea: { flex: 1 },
     scrollInner: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
 
     label: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
         marginBottom: spacing.sm,
     },
-    req: { color: '#EF4444' },
+    req: { },
     input: {
         borderWidth: 1,
-        borderColor: '#E2E8F0',
         borderRadius: radii.md,
-        backgroundColor: '#F8FAFC',
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.md,
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
         marginBottom: spacing.lg,
     },
     inputError: {
@@ -263,8 +254,6 @@ const s = StyleSheet.create({
         marginBottom: spacing.xs,
     },
     errorText: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.xs,
         color: '#EF4444',
         marginBottom: spacing.lg,
     },
@@ -279,28 +268,20 @@ const s = StyleSheet.create({
         paddingVertical: spacing.md,
         borderRadius: radii.md,
         borderWidth: 1,
-        borderColor: '#E2E8F0',
-        backgroundColor: '#F8FAFC',
         alignItems: 'center',
     },
     chipActive: {
-        borderColor: doctorColors.primary,
-        backgroundColor: doctorColors.primary + '12',
+        borderWidth: 1,
     },
     chipText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.textSecondary,
     },
     chipTextActive: {
-        color: doctorColors.primary,
     },
 
     footer: {
         paddingHorizontal: spacing.xl,
         paddingVertical: spacing.lg,
         borderTopWidth: 1,
-        borderTopColor: doctorColors.borderLight,
     },
     submitBtn: {
         flexDirection: 'row',
@@ -309,11 +290,8 @@ const s = StyleSheet.create({
         gap: spacing.sm,
         paddingVertical: spacing.lg,
         borderRadius: radii.md,
-        backgroundColor: doctorColors.primary,
     },
     submitBtnText: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
         color: '#FFFFFF',
     },
 });

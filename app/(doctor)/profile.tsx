@@ -14,20 +14,24 @@ import {
     Pressable,
     StyleSheet,
     ActivityIndicator,
+    Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
-import { getDoctorProfile } from '@/services/doctor';
-import type { DoctorProfile } from '@/services/types';
+import { getDoctorProfile, getMe } from '@/services/doctor';
+import { getHospitals } from '@/services/caregiver';
+import { requestAffiliation } from '@/services/auth';
+import type { DoctorProfile, MeResponse, HospitalListItem } from '@/services/types';
 import {
     spacing,
-    doctorColors,
-    typography,
     shadows,
     radii,
+    typography,
 } from '@/constants/theme';
+import { useTheme } from '@/providers/ThemeProvider';
+import { ThemedText, ThemedView } from '@/components/shared/Themed';
 import EditProfileModal from '@/components/doctor/EditProfileModal';
 import PayoutMethodsModal from '@/components/doctor/PayoutMethodsModal';
 import PrivacySecurityModal from '@/components/doctor/PrivacySecurityModal';
@@ -35,6 +39,7 @@ import HelpCenterModal from '@/components/doctor/HelpCenterModal';
 import TermsOfServiceModal from '@/components/doctor/TermsOfServiceModal';
 import AvailabilityModal from '@/components/doctor/AvailabilityModal';
 import ThemedAlert from '@/components/doctor/ThemedAlert';
+import HospitalAffiliationModal from '@/components/doctor/HospitalAffiliationModal';
 
 // ─── Avatar Helper ──────────────────────────────────────────────────────────
 
@@ -68,29 +73,30 @@ function SettingsRow({
     showBorder?: boolean;
     onPress?: () => void;
 }) {
+    const { colors } = useTheme();
     return (
         <Pressable
             style={({ pressed }) => [
                 s.settingsRow,
-                showBorder && s.settingsRowBorder,
+                showBorder && [s.settingsRowBorder, { borderBottomColor: colors.borderLight }],
                 pressed && onPress && { opacity: 0.6 },
             ]}
             onPress={onPress}
             disabled={!onPress}
         >
-            <View style={s.settingsIconBox}>
-                <Feather name={icon} size={18} color={doctorColors.primary} />
+            <View style={[s.settingsIconBox, { backgroundColor: colors.surfaceMuted }]}>
+                <Feather name={icon} size={18} color={colors.primary} />
             </View>
             <View style={s.settingsInfo}>
-                <Text style={s.settingsLabel}>{label}</Text>
+                <ThemedText color="primary" weight="medium" size="base" style={s.settingsLabel}>{label}</ThemedText>
                 {subtitle ? (
-                    <Text style={s.settingsSubtitle}>{subtitle}</Text>
+                    <ThemedText color="muted" size="xs" style={s.settingsSubtitle}>{subtitle}</ThemedText>
                 ) : null}
             </View>
             {rightText ? (
-                <Text style={s.settingsValue}>{rightText}</Text>
+                <ThemedText color="secondary" weight="medium" size="sm" style={s.settingsValue}>{rightText}</ThemedText>
             ) : (
-                <Feather name="chevron-right" size={18} color={doctorColors.textMuted} />
+                <Feather name="chevron-right" size={18} color={colors.textMuted} />
             )}
         </Pressable>
     );
@@ -101,6 +107,7 @@ function SettingsRow({
 export default function ProfileScreen() {
     const router = useRouter();
     const { token, logout } = useAuth();
+    const { colors, refreshBranding } = useTheme();
     const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
     const [isPayoutsOpen, setIsPayoutsOpen] = useState(false);
     const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
@@ -112,14 +119,31 @@ export default function ProfileScreen() {
     // Real profile data from API
     const [profile, setProfile] = useState<DoctorProfile | null>(null);
     const [loading, setLoading] = useState(true);
+    const [me, setMe] = useState<MeResponse | null>(null);
+    const [hospitals, setHospitals] = useState<HospitalListItem[]>([]);
+    const [isAffiliationOpen, setIsAffiliationOpen] = useState(false);
+    const [selectedHospitalId, setSelectedHospitalId] = useState('');
+    const [refreshKey, setRefreshKey] = useState(0);
 
     useEffect(() => {
         if (!token) return;
-        getDoctorProfile(token)
-            .then(setProfile)
-            .catch((e) => console.error('Failed to load profile:', e))
+        setLoading(true);
+        Promise.all([
+            getDoctorProfile(token),
+            getMe(token),
+            getHospitals()
+        ])
+            .then(([prof, meData, hospList]) => {
+                setProfile(prof);
+                setMe(meData);
+                setHospitals(hospList);
+                if (meData.hospital_id) {
+                    setSelectedHospitalId(meData.hospital_id);
+                }
+            })
+            .catch((e) => console.error('Failed to load profile data:', e))
             .finally(() => setLoading(false));
-    }, [token]);
+    }, [token, refreshKey]);
 
     const doctorName = profile?.full_name ?? 'Doctor';
     const avatarBg = AVATAR_COLORS[hashName(doctorName) % AVATAR_COLORS.length];
@@ -131,40 +155,41 @@ export default function ProfileScreen() {
     const whatsappNumber = profile?.phone_number ?? '—';
 
     return (
-        <SafeAreaView style={s.container} edges={['top']}>
+        <SafeAreaView style={[s.container, { backgroundColor: colors.background }]} edges={['top']}>
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={s.scrollContent}
             >
                 {/* ── Header ── */}
                 <View style={s.header}>
-                    <Text style={s.headerTitle}>Profile & Settings</Text>
+                    <ThemedText color="primary" weight="bold" size="2xl" style={s.headerTitle}>Profile & Settings</ThemedText>
                 </View>
 
                 {/* ── Identity Hero Card ── */}
-                <View style={s.heroCard}>
+                <ThemedView bg="surface" rounded style={s.heroCard}>
                     <View style={[s.heroAvatar, { backgroundColor: avatarBg }]}>
                         <Feather name="user" size={30} color="#374151" />
                     </View>
-                    <Text style={s.heroName}>{doctorName}</Text>
-                    <Text style={s.heroSubtext}>
+                    <ThemedText color="primary" weight="bold" size="xl" style={s.heroName}>{doctorName}</ThemedText>
+                    <ThemedText color="muted" size="sm" style={s.heroSubtext}>
                         {specialization}  •  Reg No: {licenseNumber}
-                    </Text>
+                    </ThemedText>
                     <Pressable
                         style={({ pressed }) => [
                             s.editBtn,
+                            { borderColor: colors.primary },
                             pressed && { opacity: 0.7 },
                         ]}
                         onPress={() => setIsEditProfileOpen(true)}
                     >
-                        <Feather name="edit-2" size={14} color={doctorColors.primary} />
-                        <Text style={s.editBtnText}>Edit Profile</Text>
+                        <Feather name="edit-2" size={14} color={colors.primary} />
+                        <ThemedText color="brand" weight="medium" size="sm" style={s.editBtnText}>Edit Profile</ThemedText>
                     </Pressable>
-                </View>
+                </ThemedView>
 
                 {/* ── Group 1: Practice Details ── */}
-                <Text style={s.groupTitle}>Practice Details</Text>
-                <View style={s.card}>
+                <ThemedText color="muted" weight="semiBold" size="sm" style={s.groupTitle}>Practice Details</ThemedText>
+                <ThemedView bg="surface" rounded style={s.card}>
                     <SettingsRow
                         icon="dollar-sign"
                         label="Consultation Fee"
@@ -175,23 +200,36 @@ export default function ProfileScreen() {
                         icon="message-circle"
                         label="WhatsApp Number"
                         rightText={whatsappNumber}
+                        showBorder
                     />
-                </View>
+                    <SettingsRow
+                        icon="activity"
+                        label="Hospital Affiliation"
+                        subtitle={
+                            me?.affiliation_status === 'PENDING'
+                                ? 'Affiliation request pending'
+                                : me?.affiliation_status === 'REJECTED'
+                                    ? 'Affiliation request rejected'
+                                    : hospitals.find((h) => h.id === me?.hospital_id)?.name ?? 'Default Hospital'
+                        }
+                        onPress={() => setIsAffiliationOpen(true)}
+                    />
+                </ThemedView>
 
                 {/* ── Group 2: Schedule ── */}
-                <Text style={s.groupTitle}>Schedule</Text>
-                <View style={s.card}>
+                <ThemedText color="muted" weight="semiBold" size="sm" style={s.groupTitle}>Schedule</ThemedText>
+                <ThemedView bg="surface" rounded style={s.card}>
                     <SettingsRow
                         icon="clock"
                         label="Availability"
                         subtitle="Manage your consultation hours"
                         onPress={() => setIsAvailabilityOpen(true)}
                     />
-                </View>
+                </ThemedView>
 
                 {/* ── Group 2: Payouts & Security ── */}
-                <Text style={s.groupTitle}>Payouts & Security</Text>
-                <View style={s.card}>
+                <ThemedText color="muted" weight="semiBold" size="sm" style={s.groupTitle}>Payouts & Security</ThemedText>
+                <ThemedView bg="surface" rounded style={s.card}>
                     <SettingsRow
                         icon="credit-card"
                         label="Payout Methods"
@@ -204,11 +242,11 @@ export default function ProfileScreen() {
                         label="Privacy & Security"
                         onPress={() => setIsPrivacyOpen(true)}
                     />
-                </View>
+                </ThemedView>
 
                 {/* ── Group 3: Support ── */}
-                <Text style={s.groupTitle}>Support</Text>
-                <View style={s.card}>
+                <ThemedText color="muted" weight="semiBold" size="sm" style={s.groupTitle}>Support</ThemedText>
+                <ThemedView bg="surface" rounded style={s.card}>
                     <SettingsRow
                         icon="help-circle"
                         label="Help Center"
@@ -220,7 +258,7 @@ export default function ProfileScreen() {
                         label="Terms of Service"
                         onPress={() => setIsTermsOpen(true)}
                     />
-                </View>
+                </ThemedView>
 
                 {/* ── Log Out ── */}
                 <Pressable
@@ -245,6 +283,16 @@ export default function ProfileScreen() {
                             .then(setProfile)
                             .catch((e) => console.error('Failed to reload profile:', e));
                     }
+                }}
+            />
+            <HospitalAffiliationModal
+                visible={isAffiliationOpen}
+                onClose={() => setIsAffiliationOpen(false)}
+                me={me}
+                hospitals={hospitals}
+                onSaved={() => {
+                    setRefreshKey((k) => k + 1);
+                    refreshBranding?.();
                 }}
             />
             <PayoutMethodsModal
@@ -298,7 +346,6 @@ export default function ProfileScreen() {
 const s = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8FAFC',
     },
     scrollContent: {
         paddingBottom: spacing.lg,
@@ -311,16 +358,11 @@ const s = StyleSheet.create({
         paddingBottom: spacing.md,
     },
     headerTitle: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size['2xl'],
-        color: doctorColors.textPrimary,
     },
 
     // Hero card
     heroCard: {
         alignItems: 'center',
-        backgroundColor: doctorColors.surface,
-        borderRadius: 16,
         padding: spacing.xl,
         marginHorizontal: spacing.xl,
         marginTop: spacing.md,
@@ -335,15 +377,9 @@ const s = StyleSheet.create({
         marginBottom: spacing.md,
     },
     heroName: {
-        fontFamily: typography.fontFamily.bold,
-        fontSize: 20,
-        color: doctorColors.textPrimary,
         marginBottom: spacing.xxs,
     },
     heroSubtext: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
         marginBottom: spacing.lg,
     },
     editBtn: {
@@ -354,19 +390,12 @@ const s = StyleSheet.create({
         paddingHorizontal: spacing.lg,
         borderRadius: radii.md,
         borderWidth: 1,
-        borderColor: doctorColors.primary,
     },
     editBtnText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.primary,
     },
 
     // Groups
     groupTitle: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
         textTransform: 'uppercase',
         letterSpacing: 1,
         marginTop: spacing['3xl'],
@@ -374,8 +403,6 @@ const s = StyleSheet.create({
         paddingHorizontal: spacing.xl,
     },
     card: {
-        backgroundColor: doctorColors.surface,
-        borderRadius: radii.lg,
         marginHorizontal: spacing.xl,
         ...shadows.elevated,
         overflow: 'hidden',
@@ -391,13 +418,11 @@ const s = StyleSheet.create({
     },
     settingsRowBorder: {
         borderBottomWidth: 1,
-        borderBottomColor: doctorColors.borderLight,
     },
     settingsIconBox: {
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: doctorColors.surfaceMuted,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -406,19 +431,10 @@ const s = StyleSheet.create({
         gap: spacing.xxs,
     },
     settingsLabel: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.base,
-        color: doctorColors.textPrimary,
     },
     settingsSubtitle: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.xs,
-        color: doctorColors.textMuted,
     },
     settingsValue: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.textSecondary,
     },
 
     // Logout
