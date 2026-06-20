@@ -109,7 +109,7 @@ function getFontFamily(name?: string): ThemeTypography['heading'] {
 }
 
 export function useDynamicBranding(role: 'caregiver' | 'doctor') {
-    const { token } = useAuth();
+    const { token, user } = useAuth();
     const baseColors = (role === 'caregiver' ? patientColors : doctorColors) as unknown as RoleColors;
     const [colors, setColors] = useState<RoleColors>(baseColors);
     const [typography, setTypography] = useState<ThemeTypography>(defaultTypography);
@@ -127,7 +127,7 @@ export function useDynamicBranding(role: 'caregiver' | 'doctor') {
         }
 
         let isMounted = true;
-        const CACHE_KEY = `BRANDING_CACHE_${role}`;
+        const CACHE_KEY = `BRANDING_CACHE_${role}_${user?.id || 'default'}`;
 
         async function loadBranding() {
             try {
