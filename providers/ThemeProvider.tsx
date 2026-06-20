@@ -123,6 +123,7 @@ export function useDynamicBranding(role: 'caregiver' | 'doctor') {
     useEffect(() => {
         if (!token) {
             setColors(baseColors);
+            setBranding({ name: 'CareConnect', primaryColor: '#4F46E5', logoUrl: null });
             return;
         }
 
@@ -222,6 +223,7 @@ export function useDynamicBranding(role: 'caregiver' | 'doctor') {
                     setColors(baseColors);
                     setTypography(defaultTypography);
                     setShape(defaultShape);
+                    setBranding({ name: 'CareConnect', primaryColor: '#4F46E5', logoUrl: null });
                 }
             } catch (err) {
                 console.warn('[Theme] Failed to load dynamic branding:', err);
@@ -229,6 +231,7 @@ export function useDynamicBranding(role: 'caregiver' | 'doctor') {
                     setColors(baseColors);
                     setTypography(defaultTypography);
                     setShape(defaultShape);
+                    setBranding({ name: 'CareConnect', primaryColor: '#4F46E5', logoUrl: null });
                 }
             }
         }

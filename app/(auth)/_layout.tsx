@@ -5,11 +5,23 @@
  * If a user is already authenticated, redirect them to their role's group.
  */
 
+import { useEffect } from 'react';
 import { Stack, Redirect } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { Alert } from 'react-native';
 
 export default function AuthLayout() {
-    const { user, isLoading } = useAuth();
+    const { user, isLoading, logout } = useAuth();
+
+    useEffect(() => {
+        if (user && user.role !== 'DOCTOR' && user.role !== 'CAREGIVER') {
+            Alert.alert(
+                "Access Denied",
+                "The mobile app is strictly for doctors and caregivers. Hospital admins must use the web dashboard."
+            );
+            logout();
+        }
+    }, [user, logout]);
 
     // Still restoring session from SecureStore
     if (isLoading) return null;
@@ -19,7 +31,9 @@ export default function AuthLayout() {
         if (user.role === 'DOCTOR') {
             return <Redirect href="/(doctor)" />;
         }
-        return <Redirect href="/(caregiver)" />;
+        if (user.role === 'CAREGIVER') {
+            return <Redirect href="/(caregiver)" />;
+        }
     }
 
     return (

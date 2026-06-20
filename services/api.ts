@@ -7,6 +7,7 @@
  */
 
 import Constants from 'expo-constants';
+import * as SecureStore from 'expo-secure-store';
 
 export const API_BASE_URL =
     Constants.expoConfig?.extra?.apiUrl ??
@@ -52,6 +53,12 @@ export async function apiRequest<T>(config: RequestConfig): Promise<T> {
     });
 
     if (!res.ok) {
+        if (res.status === 401) {
+            try {
+                await SecureStore.deleteItemAsync('careconnect_auth_token');
+                await SecureStore.deleteItemAsync('careconnect_user');
+            } catch (e) {}
+        }
         const error = await res.json().catch(() => ({ message: res.statusText }));
         throw new ApiError(error.message || `API error: ${res.status}`, res.status);
     }

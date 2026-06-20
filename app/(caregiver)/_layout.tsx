@@ -14,7 +14,8 @@ export default function CaregiverLayout() {
 
     if (isLoading) return null;
     if (!user) return <Redirect href="/(auth)/login" />;
-    if (user.role !== 'CAREGIVER') return <Redirect href="/(doctor)" />;
+    if (user.role === 'DOCTOR') return <Redirect href="/(doctor)" />;
+    if (user.role !== 'CAREGIVER') return <Redirect href="/(auth)/login" />;
 
     return (
         <CaregiverThemeProvider>

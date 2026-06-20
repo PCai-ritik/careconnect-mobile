@@ -153,7 +153,8 @@ export default function DoctorTabLayout() {
 
     if (isLoading) return null;
     if (!user) return <Redirect href="/(auth)/doctor-login" />;
-    if (user.role !== 'DOCTOR') return <Redirect href="/(caregiver)" />;
+    if (user.role === 'CAREGIVER') return <Redirect href="/(caregiver)" />;
+    if (user.role !== 'DOCTOR') return <Redirect href="/(auth)/doctor-login" />;
 
     return (
         <DoctorThemeProvider>
