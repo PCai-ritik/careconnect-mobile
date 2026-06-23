@@ -22,9 +22,12 @@ import { FiraSans_400Regular, FiraSans_500Medium, FiraSans_600SemiBold, FiraSans
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 
 import { AuthProvider } from '@/providers/AuthProvider';
 import { ThemeProvider } from '@/providers/ThemeProvider';
+import { ActiveCallProvider } from '@/providers/ActiveCallProvider';
 import PatientSplashScreen from '@/components/PatientSplashScreen';
 
 export {
@@ -75,22 +78,28 @@ export default function RootLayout() {
   // initialRouteName is (auth) → Login is already the default destination.
   // No router.replace needed — the splash overlay just fades away to reveal it.
   return (
-    <AuthProvider>
-      <ThemeProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(caregiver)" />
-          <Stack.Screen name="(doctor)" />
-          <Stack.Screen name="+not-found" />
-        </Stack>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <ThemeProvider>
+          <ActiveCallProvider>
+          <BottomSheetModalProvider>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(caregiver)" />
+              <Stack.Screen name="(doctor)" />
+              <Stack.Screen name="+not-found" />
+            </Stack>
 
-        {/* Animated splash overlay — fades away to reveal the Login screen */}
-        {!isSplashDone && (
-          <PatientSplashScreen
-            onAnimationComplete={() => setIsSplashDone(true)}
-          />
-        )}
-      </ThemeProvider>
-    </AuthProvider>
+            {/* Animated splash overlay — fades away to reveal the Login screen */}
+            {!isSplashDone && (
+              <PatientSplashScreen
+                onAnimationComplete={() => setIsSplashDone(true)}
+              />
+            )}
+          </BottomSheetModalProvider>
+          </ActiveCallProvider>
+        </ThemeProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }

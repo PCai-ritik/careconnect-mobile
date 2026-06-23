@@ -40,8 +40,10 @@ import Animated, {
     runOnJS,
 } from 'react-native-reanimated';
 
+import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '@/hooks/useAuth';
 import { loginCaregiver, loginDoctor } from '@/services/auth';
+import { getMe } from '@/services/doctor';
 import {
     patientColors,
     doctorColors,
@@ -220,6 +222,21 @@ export default function LoginScreen() {
         try {
             const loginFn = role === 'caregiver' ? loginCaregiver : loginDoctor;
             const response = await loginFn({ email, password });
+
+            if (role === 'doctor') {
+                const me = await getMe(response.access_token);
+                if (me.onboarding_completed === false) {
+                    await SecureStore.setItemAsync('careconnect_onboarding_token', response.access_token);
+                    await SecureStore.setItemAsync('careconnect_onboarding_user', JSON.stringify({
+                        user_id: response.user_id,
+                        role: response.role,
+                        hospital_id: response.hospital_id || 'unassigned',
+                    }));
+                    router.replace('/(auth)/doctor-onboarding' as Href);
+                    return;
+                }
+            }
+
             await login(response);
         } catch (error: unknown) {
             const message =

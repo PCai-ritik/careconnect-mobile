@@ -17,8 +17,9 @@ import {
     Animated,
     ActivityIndicator,
 } from 'react-native';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { ThemedBottomSheet } from '@/components/shared/ThemedBottomSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import useSwipeDown from '@/hooks/useSwipeDown';
 import { Feather } from '@expo/vector-icons';
 import {
     spacing,
@@ -52,7 +53,6 @@ export default function HospitalAffiliationModal({
     onSaved,
 }: HospitalAffiliationModalProps) {
     const insets = useSafeAreaInsets();
-    const { panHandlers, animatedStyle } = useSwipeDown(onClose);
     const { token } = useAuth();
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -96,21 +96,14 @@ export default function HospitalAffiliationModal({
 
     return (
         <>
-            <Modal
-                animationType="slide"
-                transparent
-                visible={visible}
-                onRequestClose={onClose}
-            >
+            <ThemedBottomSheet visible={visible} onClose={onClose}>
                 {/* Backdrop */}
-                <Pressable style={s.backdrop} onPress={onClose} />
+                
 
                 {/* Sheet */}
-                <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom }]}>
+                
                     {/* Handle */}
-                    <ThemedView style={s.handleRow} {...panHandlers}>
-                        <ThemedView style={s.handle} />
-                    </ThemedView>
+                    
 
                     {/* Header */}
                     <ThemedView style={s.header}>
@@ -189,7 +182,7 @@ export default function HospitalAffiliationModal({
                                     />
                                 </ThemedView>
 
-                                <ScrollView
+                                <BottomSheetScrollView
                                     style={s.listArea}
                                     showsVerticalScrollIndicator={false}
                                     keyboardShouldPersistTaps="handled"
@@ -232,7 +225,7 @@ export default function HospitalAffiliationModal({
                                     {filteredHospitals.length === 0 && (
                                         <ThemedText size="sm" color="muted" style={s.noResults}>No hospitals match your search</ThemedText>
                                     )}
-                                </ScrollView>
+                                </BottomSheetScrollView>
                             </ThemedView>
                         )}
                     </ThemedView>
@@ -260,8 +253,8 @@ export default function HospitalAffiliationModal({
                             </Pressable>
                         </ThemedView>
                     )}
-                </Animated.View>
-            </Modal>
+                
+            </ThemedBottomSheet>
 
             <PatientThemedAlert
                 visible={showSuccess}
@@ -280,28 +273,10 @@ export default function HospitalAffiliationModal({
 }
 
 const s = StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-    sheet: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: SCREEN_HEIGHT * 0.85,
-        backgroundColor: patientColors.surface,
-        borderTopLeftRadius: radii.xl,
-        borderTopRightRadius: radii.xl,
-        ...shadows.elevated,
-    },
-    handleRow: {
-        alignItems: 'center',
-        paddingTop: spacing.md,
-        paddingBottom: spacing.xs,
-    },
-    handle: {
-        width: 40,
-        height: 4,
-        borderRadius: 2,
-    },
+    
+    
+    
+    
     header: {
         flexDirection: 'row',
         alignItems: 'center',

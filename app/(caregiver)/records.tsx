@@ -27,7 +27,7 @@ import { useTheme } from '@/providers/ThemeProvider';
 import { ThemedView, ThemedText } from '@/components/shared/Themed';
 import { useAuth } from '@/hooks/useAuth';
 import { getPatientRecords, getLinkedPatients } from '@/services/caregiver';
-import type { MedicalRecord } from '@/services/types';
+import type { MedicalRecord, PatientProfile } from '@/services/types';
 import MedicalRecordSheet from '@/components/MedicalRecordSheet';
 
 export default function RecordsScreen() {
@@ -36,6 +36,7 @@ export default function RecordsScreen() {
     const { colors } = useTheme();
     const styles = useStyles(colors);
     const [records, setRecords] = useState<MedicalRecord[]>([]);
+    const [activePatient, setActivePatient] = useState<PatientProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
     const [isRecordSheetOpen, setIsRecordSheetOpen] = useState(false);
@@ -46,6 +47,7 @@ export default function RecordsScreen() {
             try {
                 const patients = await getLinkedPatients(token);
                 if (patients.length > 0) {
+                    setActivePatient(patients[0]);
                     const recs = await getPatientRecords(token, patients[0].id);
                     setRecords(recs);
                 }
@@ -61,12 +63,7 @@ export default function RecordsScreen() {
         <SafeAreaView style={styles.container}>
             {/* ── Header ── */}
             <ThemedView style={styles.header}>
-                <Pressable
-                    style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
-                    onPress={() => router.back()}
-                >
-                    <Feather name="chevron-left" size={22} color={colors.textPrimary} />
-                </Pressable>
+                <ThemedView style={{ width: 40 }} />
                 <ThemedText weight="semiBold" size="lg" style={styles.headerTitle}>Medical Records</ThemedText>
                 <ThemedView style={{ width: 40 }} />
             </ThemedView>
@@ -128,6 +125,7 @@ export default function RecordsScreen() {
                 visible={isRecordSheetOpen}
                 record={selectedRecord}
                 onClose={() => setIsRecordSheetOpen(false)}
+                patient={activePatient}
             />
         </SafeAreaView >
     );

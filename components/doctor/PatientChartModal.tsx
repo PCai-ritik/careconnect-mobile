@@ -8,7 +8,7 @@
  *   3. Medications (flat list of all prescriptions)
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     View,
     Text,
@@ -20,8 +20,8 @@ import {
     Animated,
     ActivityIndicator,
 } from 'react-native';
+import { ThemedBottomSheet } from '@/components/shared/ThemedBottomSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import useSwipeDown from '@/hooks/useSwipeDown';
 import { Feather } from '@expo/vector-icons';
 import {
     spacing,
@@ -87,6 +87,7 @@ interface PatientChartModalProps {
     patient: RealPatientProfile | null;
     onClose: () => void;
     onNewPrescription?: () => void;
+    onRefreshRecords?: (callback: () => void) => void;
 }
 
 const TAB_CONFIG: { id: TabId; label: string; icon: keyof typeof Feather.glyphMap }[] = [
@@ -238,7 +239,7 @@ function HistoryTab({ records }: { records: MedicalRecord[] }) {
 function ProfileTab({ patient }: { patient: RealPatientProfile }) {
     const { colors } = useTheme();
     return (
-        <View>
+        <View style={s.profileContainer}>
             {/* Personal Information */}
             <ThemedText color="muted" weight="semiBold" size="sm" style={s.sectionLabel}>Personal Information</ThemedText>
             <View style={s.infoCard}>
@@ -315,7 +316,7 @@ function MedicationsTab({ records }: { records: MedicalRecord[] }) {
 
     if (allRx.length === 0) {
         return (
-            <View>
+            <View style={s.medicationsContainer}>
                 <ThemedText color="muted" weight="semiBold" size="sm" style={s.sectionLabel}>Current & Past Medications</ThemedText>
                 <View style={{ alignItems: 'center', paddingVertical: spacing['3xl'] }}>
                     <Feather name="package" size={32} color={colors.textMuted} />
@@ -326,7 +327,7 @@ function MedicationsTab({ records }: { records: MedicalRecord[] }) {
     }
 
     return (
-        <View>
+        <View style={s.medicationsContainer}>
             <ThemedText color="muted" weight="semiBold" size="sm" style={s.sectionLabel}>Current & Past Medications</ThemedText>
             {allRx.map((rx) => (
                 <View key={rx.key} style={[s.medicationRow, { borderColor: colors.borderLight }]}>
@@ -347,16 +348,28 @@ function MedicationsTab({ records }: { records: MedicalRecord[] }) {
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
-export default function PatientChartModal({ visible, patient, onClose, onNewPrescription }: PatientChartModalProps) {
+export default function PatientChartModal({ visible, patient, onClose, onNewPrescription, onRefreshRecords }: PatientChartModalProps) {
     const insets = useSafeAreaInsets();
     const { colors } = useTheme();
-    const { panHandlers, animatedStyle } = useSwipeDown(onClose);
     const [activeTab, setActiveTab] = useState<TabId>('history');
     const { token } = useAuth();
     const [records, setRecords] = useState<MedicalRecord[]>([]);
     const [loadingRecords, setLoadingRecords] = useState(false);
+    const [refreshKey, setRefreshKey] = useState(0);
+    const scrollViewRef = useRef<ScrollView>(null);
 
-    // Fetch records when modal opens
+    const handleRefresh = useCallback(() => {
+        setRefreshKey(k => k + 1);
+    }, []);
+
+    // Register refresh callback with parent.
+    // onRefreshRecords is stabilised with useCallback in the parent so this
+    // effect runs exactly once per mount and never loops.
+    useEffect(() => {
+        onRefreshRecords?.(handleRefresh);
+    }, [onRefreshRecords, handleRefresh]);
+
+    // Fetch records when modal opens or when prescription is created
     useEffect(() => {
         if (visible && patient && token) {
             setLoadingRecords(true);
@@ -365,28 +378,26 @@ export default function PatientChartModal({ visible, patient, onClose, onNewPres
                 .catch(() => setRecords([]))
                 .finally(() => setLoadingRecords(false));
         }
-    }, [visible, patient, token]);
+    }, [visible, patient, token, refreshKey]);
+
+    // Reset scroll position when tab changes
+    useEffect(() => {
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    }, [activeTab]);
 
     if (!patient) return null;
 
     const avatarBg = getAvatarColor(patient.full_name);
 
     return (
-        <Modal
-            animationType="slide"
-            transparent
-            visible={visible}
-            onRequestClose={onClose}
-        >
+        <ThemedBottomSheet visible={visible} onClose={onClose}>
             {/* Backdrop */}
-            <Pressable style={s.backdrop} onPress={onClose} />
+            
 
             {/* Sheet */}
-            <Animated.View style={[s.sheet, { backgroundColor: colors.surface }, animatedStyle, { paddingBottom: insets.bottom }]}>
+            
                 {/* Handle */}
-                <View style={s.handleRow} {...panHandlers}>
-                    <View style={[s.handle, { backgroundColor: colors.border }]} />
-                </View>
+                
 
                 {/* Header */}
                 <View style={s.header}>
@@ -428,9 +439,11 @@ export default function PatientChartModal({ visible, patient, onClose, onNewPres
 
                 {/* Tab Content */}
                 <ScrollView
+                    ref={scrollViewRef}
                     style={s.tabContent}
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={s.tabContentInner}
+                    nestedScrollEnabled={true}
                 >
                     {loadingRecords ? (
                         <View style={{ alignItems: 'center', paddingVertical: spacing['3xl'] }}>
@@ -469,32 +482,20 @@ export default function PatientChartModal({ visible, patient, onClose, onNewPres
                         <ThemedText weight="semiBold" size="sm" style={s.footerBtnPrimaryText}>New Prescription</ThemedText>
                     </Pressable>
                 </View>
-            </Animated.View>
-        </Modal>
+            
+        </ThemedBottomSheet>
     );
 }
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-    backdrop: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.45)',
-    },
-    sheet: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: SCREEN_HEIGHT * 0.9,
-        borderTopLeftRadius: radii.xl,
-        borderTopRightRadius: radii.xl,
-        ...shadows.elevated,
-    },
+    
+    
 
     // Handle
-    handleRow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
-    handle: { width: 40, height: 4, borderRadius: 2 },
+    
+    
 
     // Header
     header: {
@@ -649,6 +650,7 @@ const s = StyleSheet.create({
     },
 
     // ─── Profile Tab
+    profileContainer: {},
     infoCard: {
         gap: spacing.lg,
     },
@@ -699,6 +701,7 @@ const s = StyleSheet.create({
     },
 
     // ─── Medications Tab
+    medicationsContainer: {},
     medicationRow: {
         flexDirection: 'row',
         alignItems: 'flex-start',

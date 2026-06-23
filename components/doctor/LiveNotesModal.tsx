@@ -21,6 +21,7 @@ import {
 } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { createDoctorNote } from '@/services/doctor';
+import { ThemedBottomSheet } from '@/components/shared/ThemedBottomSheet';
 
 interface LiveNotesModalProps {
     visible: boolean;
@@ -66,17 +67,9 @@ export default function LiveNotesModal({
     };
 
     return (
-        <Modal
-            transparent
-            animationType="slide"
-            visible={visible}
-            onRequestClose={onClose}
-        >
-            <KeyboardAvoidingView 
-                style={styles.overlay} 
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            >
-                <Pressable style={styles.backdrop} onPress={onClose} />
+        <ThemedBottomSheet visible={visible} onClose={onClose}>
+            
+                
                 
                 <View style={styles.card}>
                     {/* Header */}
@@ -139,8 +132,8 @@ export default function LiveNotesModal({
                         </View>
                     )}
                 </View>
-            </KeyboardAvoidingView>
-        </Modal>
+            
+        </ThemedBottomSheet>
     );
 }
 
@@ -149,10 +142,7 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'flex-end',
     },
-    backdrop: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0,0,0,0.4)',
-    },
+    
     card: {
         backgroundColor: doctorColors.background,
         borderTopLeftRadius: radii.xl,

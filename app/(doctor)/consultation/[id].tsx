@@ -24,7 +24,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
+import { useActiveCall } from '@/providers/ActiveCallProvider';
 import {
     doctorColors,
     spacing,
@@ -33,7 +35,7 @@ import {
     shadows,
 } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
-import { getAppointments, getPatients, getDoctorProfile, startVideoSession, getJoinToken, updateAppointmentStatus } from '@/services/doctor';
+import { getAppointments, getPatients, getDoctorProfile, startVideoSession, getJoinToken, updateAppointmentStatus, endVideoSession } from '@/services/doctor';
 import type { PatientProfile, Appointment, DoctorProfile } from '@/services/types';
 import PatientChartModal from '@/components/doctor/PatientChartModal';
 import NewPrescriptionModal from '@/components/doctor/NewPrescriptionModal';
@@ -44,6 +46,7 @@ import { LIVEKIT_AVAILABLE } from '@/services/livekit';
 
 let LiveKitRoom: any = null;
 let VideoTrack: any = null;
+let VideoView: any = null;
 let useTracks: any = () => [];
 let useLocalParticipant: any = () => ({ localParticipant: null });
 let useRemoteParticipants: any = () => [];
@@ -56,6 +59,7 @@ if (LIVEKIT_AVAILABLE) {
         const lk = require('@livekit/react-native');
         LiveKitRoom = lk.LiveKitRoom;
         VideoTrack = lk.VideoTrack;
+        VideoView = lk.VideoView;
         useTracks = lk.useTracks;
         useLocalParticipant = lk.useLocalParticipant;
         useRemoteParticipants = lk.useRemoteParticipants;
@@ -122,7 +126,12 @@ function formatType(type: string): string {
 export default function DoctorConsultationScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
+    const navigation = useNavigation();
     const { token } = useAuth();
+    const { activeCall, minimizeCall, clearCall } = useActiveCall();
+    // Ref so useFocusEffect can read the latest context value without a stale closure
+    const activeCallRef = useRef(activeCall);
+    useEffect(() => { activeCallRef.current = activeCall; }, [activeCall]);
 
     // ── Real data from API ──
     const [patient, setPatient] = useState<PatientProfile | null>(null);
@@ -137,6 +146,16 @@ export default function DoctorConsultationScreen() {
     const [isPrescriptionOpen, setIsPrescriptionOpen] = useState(false);
     const [isNotesOpen, setIsNotesOpen] = useState(false);
 
+    // ── Navigation exit control ──
+    const intentionalExitRef = useRef(false);
+    const minimizingRef = useRef(false);
+
+    // ── Refs to always capture latest mic/elapsed without stale closures ──
+    const isMicOnRef = useRef(isMicOn);
+    useEffect(() => { isMicOnRef.current = isMicOn; }, [isMicOn]);
+    const elapsedRef = useRef(elapsed);
+    useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
+
     // ── Patient-joined tracking (for COMPLETED status) ──
     const patientJoinedRef = useRef(false);
 
@@ -148,6 +167,11 @@ export default function DoctorConsultationScreen() {
     // ── LiveKit connection state ──
     const [joinToken, setJoinToken] = useState<string | null>(null);
     const [lkError, setLkError] = useState<string | null>(null);
+
+    // ── Triggers a fresh LiveKit init on re-entry after an ended call ──
+    const [sessionKey, setSessionKey] = useState(0);
+    // Tracks whether this is the very first focus (skip reset on initial mount)
+    const isFirstFocusRef = useRef(true);
 
     // ── Fetch appointment + patient from API ──
     useEffect(() => {
@@ -185,7 +209,8 @@ export default function DoctorConsultationScreen() {
                 const session = await startVideoSession(token, id);
                 if (!cancelled) setJoinToken(session.join_token);
             } catch (err: any) {
-                if (err?.message?.includes('409')) {
+                // 409 means a session already exists — fall back to fetching the existing token
+                if (err?.status === 409) {
                     try {
                         const join = await getJoinToken(token, id);
                         if (!cancelled) setJoinToken(join.join_token);
@@ -201,23 +226,14 @@ export default function DoctorConsultationScreen() {
             cancelled = true;
             AudioSession.stopAudioSession();
         };
-    }, [token, id]);
+    }, [token, id, sessionKey]);
 
     const patientName = patient?.full_name ?? 'Patient';
     const appointmentType = appointment ? formatType(appointment.appointment_type) : 'Consultation';
     const doctorInitials = doctorProfile ? getInitials(doctorProfile.full_name) : 'DR';
 
-    // ── Call timer ──
+    // ── Call timer — managed entirely through useFocusEffect ──
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-    useEffect(() => {
-        timerRef.current = setInterval(() => {
-            setElapsed((e) => e + 1);
-        }, 1000);
-        return () => {
-            if (timerRef.current) clearInterval(timerRef.current);
-        };
-    }, []);
 
     const formatTime = (totalSeconds: number) => {
         const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
@@ -236,13 +252,109 @@ export default function DoctorConsultationScreen() {
         }
     }, [elapsed, durationMinutes, durationNotifShown]);
 
+    // ── Focus lifecycle: reset state for fresh calls, restore state after minimize ──
+    useFocusEffect(useCallback(() => {
+        const prev = activeCallRef.current;
+
+        if (prev) {
+            // Returning from the floating bar → restore exactly where we left off
+            setElapsed(prev.elapsed);
+            setIsMicOn(prev.isMicOn);
+        } else if (!isFirstFocusRef.current) {
+            // Re-entering after ending a previous call → full clean slate
+            setElapsed(0);
+            setIsMicOn(true);
+            setIsCameraOn(true);
+            setJoinToken(null);
+            setLkError(null);
+            setDurationNotifShown(false);
+            setShowDurationNotif(false);
+            patientJoinedRef.current = false;
+            // Bump sessionKey so the LiveKit init effect re-runs with a fresh session
+            setSessionKey((k) => k + 1);
+        }
+        isFirstFocusRef.current = false;
+
+        clearCall();
+        intentionalExitRef.current = false;
+        minimizingRef.current = false;
+
+        // Start (or restart) the call timer
+        if (timerRef.current) clearInterval(timerRef.current);
+        timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
+
+        // On blur (minimize or navigate away) stop the timer;
+        // context timer takes over when minimized
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []));
+
+    // ── Intercept back navigation → minimize instead of ending the call ──
+    // Uses refs so the callback never becomes stale with old elapsed/isMicOn values
+    const handleMinimize = useCallback(() => {
+        if (minimizingRef.current) return;
+        minimizingRef.current = true;
+        minimizeCall({
+            appointmentId: id as string,
+            name: patientName,
+            role: 'doctor',
+            elapsed: elapsedRef.current,
+            isMicOn: isMicOnRef.current,
+        });
+        if (router.canGoBack()) {
+            router.back();
+        } else {
+            router.replace('/(doctor)' as any);
+        }
+    }, [id, patientName, minimizeCall, router]);
+
+    useEffect(() => {
+        const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
+            if (intentionalExitRef.current || minimizingRef.current) return;
+            e.preventDefault();
+            handleMinimize();
+        });
+        return unsubscribe;
+    }, [navigation, handleMinimize]);
+
     // ── Actions ──
-    const handleEndCall = useCallback(async () => {
+    const handleEndCall = useCallback(() => {
+        intentionalExitRef.current = true;
+        clearCall();
         if (timerRef.current) clearInterval(timerRef.current);
 
-        await AudioSession.stopAudioSession();
-        router.back();
-    }, [router, token, id]);
+        // Unmount LiveKitRoom so the client disconnects gracefully BEFORE we
+        // delete the server-side room.  If we delete the room while the client
+        // is still connected, LiveKit's internal state machine tries to access
+        // ConnectionState.Closing on an already-torn-down audio session → crash.
+        setJoinToken(null);
+
+        // Navigate INSTANTLY — nothing blocks the UI
+        if (router.canGoBack()) {
+            router.back();
+        } else {
+            router.replace('/(doctor)' as any);
+        }
+
+        // Background teardown — fire-and-forget, no UX impact.
+        // The 300 ms delay gives React one render cycle to unmount LiveKitRoom
+        // and let LiveKit finish its client-side disconnect before we tell the
+        // server to delete the room.
+        setTimeout(async () => {
+            try { await AudioSession.stopAudioSession(); } catch { /* ignore */ }
+            if (token && id) {
+                try { await endVideoSession(token, id as string); } catch { /* ignore */ }
+                if (patientJoinedRef.current) {
+                    try { await updateAppointmentStatus(token, id as string, 'COMPLETED'); } catch { /* ignore */ }
+                }
+            }
+        }, 300);
+    }, [router, token, id, clearCall]);
 
     if (loading) {
         return (
@@ -276,10 +388,10 @@ export default function DoctorConsultationScreen() {
 
             {/* ── Floating Header ── */}
             <SafeAreaView style={styles.headerOverlay} edges={['top']}>
-                {/* Back */}
+                {/* Back — minimizes the call */}
                 <Pressable
                     style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.7 }]}
-                    onPress={() => router.back()}
+                    onPress={handleMinimize}
                 >
                     <Feather name="chevron-left" size={22} color={VC.text} />
                 </Pressable>
@@ -300,7 +412,7 @@ export default function DoctorConsultationScreen() {
 
             {/* ── PiP Self-View (Doctor) ── */}
             {joinToken ? (
-                <LocalPiPView isCameraOn={isCameraOn} doctorInitials={doctorInitials} />
+                <LocalPiPView isCameraOn={isCameraOn} isMicOn={isMicOn} doctorInitials={doctorInitials} />
             ) : (
                 <View style={styles.pip}>
                     <View style={styles.pipInner}>
@@ -416,8 +528,8 @@ export default function DoctorConsultationScreen() {
             serverUrl={LIVEKIT_URL}
             token={joinToken ?? undefined}
             connect={true}
-            audio={true}
-            video={true}
+            audio={isMicOn}
+            video={isCameraOn}
         >
             {content}
         </LiveKitRoom>
@@ -605,6 +717,35 @@ const styles = StyleSheet.create({
     },
 });
 
+// ─── Status Indicator Styles ─────────────────────────────────────────────────
+
+const statusStyles = StyleSheet.create({
+    remoteMicBadge: {
+        position: 'absolute',
+        top: 12,
+        right: 12,
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: VC.red,
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 10,
+    },
+    pipMicBadge: {
+        position: 'absolute',
+        bottom: 4,
+        left: 4,
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: VC.red,
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 10,
+    },
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // LiveKit sub-components — must be children of <LiveKitRoom>
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -615,6 +756,7 @@ function RemoteVideoView({ patientName, patientJoinedRef }: { patientName: strin
         { onlySubscribed: true }
     );
     const remoteParticipants = useRemoteParticipants();
+    const remote = remoteParticipants[0];
 
     // Track if patient ever joined (lifted to parent via ref)
     useEffect(() => {
@@ -623,49 +765,79 @@ function RemoteVideoView({ patientName, patientJoinedRef }: { patientName: strin
         }
     }, [remoteParticipants.length, patientJoinedRef]);
 
-    // @ts-ignore – dynamic require types
     const remoteTrack = tracks.find(
         (t: any) => !t.participant.isLocal && t.source === Track.Source.Camera
     );
+    const trackToRender = remoteTrack?.publication?.videoTrack || remoteTrack?.publication?.track;
+    const isCameraOn = remote?.isCameraEnabled ?? false;
+    const isMicOn = remote?.isMicrophoneEnabled ?? true;
 
-    if (remoteTrack && isTrackReference(remoteTrack) && remoteTrack.publication?.track) {
+    // Remote joined but camera is off
+    if (remote && !isCameraOn) {
         return (
-            <VideoTrack
-                trackRef={remoteTrack}
-                style={{ flex: 1, width: '100%', height: '100%', objectFit: 'contain' } as any}
-            />
+            <>
+                <View style={[styles.patientAvatarLarge, { backgroundColor: avatarColor(patientName) }]}>
+                    <Feather name="video-off" size={48} color="#374151" />
+                </View>
+                <Text style={styles.videoLabel}>{patientName} turned off their camera</Text>
+                {!isMicOn && (
+                    <View style={statusStyles.remoteMicBadge}>
+                        <Feather name="mic-off" size={14} color="#FFFFFF" />
+                    </View>
+                )}
+            </>
         );
     }
 
+    // Remote joined and camera is on
+    if (remoteTrack && isTrackReference(remoteTrack) && trackToRender) {
+        return (
+            <View style={{ flex: 1, width: '100%', height: '100%' }}>
+                <VideoView
+                    videoTrack={trackToRender}
+                    style={{ flex: 1, width: '100%', height: '100%' }}
+                    objectFit="contain"
+                />
+                {!isMicOn && (
+                    <View style={statusStyles.remoteMicBadge}>
+                        <Feather name="mic-off" size={14} color="#FFFFFF" />
+                    </View>
+                )}
+            </View>
+        );
+    }
+
+    // Patient not yet joined
     return (
         <>
-            <View style={[{ width: 120, height: 120, borderRadius: 60, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8D5C4' }]}>
+            <View style={[styles.patientAvatarLarge, { backgroundColor: avatarColor(patientName) }]}>
                 <Feather name="user" size={56} color="#374151" />
             </View>
-            <Text style={{ color: VC.textMuted, marginTop: spacing.md, fontFamily: typography.fontFamily.regular, fontSize: 14 }}>
+            <Text style={styles.videoLabel}>
                 Waiting for {patientName} to join…
             </Text>
         </>
     );
 }
 
-function LocalPiPView({ isCameraOn, doctorInitials }: { isCameraOn: boolean; doctorInitials: string }) {
+function LocalPiPView({ isCameraOn, isMicOn, doctorInitials }: { isCameraOn: boolean; isMicOn: boolean; doctorInitials: string }) {
     const tracks = useTracks(
         [{ source: Track.Source.Camera, withPlaceholder: true }],
         { onlySubscribed: false }
     );
-    // @ts-ignore – dynamic require types
     const localTrack = tracks.find(
         (t: any) => t.participant.isLocal && t.source === Track.Source.Camera
     );
+    const trackToRender = localTrack?.publication?.videoTrack || localTrack?.publication?.track;
 
     return (
         <View style={styles.pip}>
-            {isCameraOn && localTrack && isTrackReference(localTrack) && localTrack.publication?.track ? (
-                <VideoTrack
-                    trackRef={localTrack}
-                    style={{ width: '100%', height: '100%', borderRadius: radii.lg, objectFit: 'contain' } as any}
-                    mirror={false}
+            {isCameraOn && localTrack && isTrackReference(localTrack) && trackToRender ? (
+                <VideoView
+                    videoTrack={trackToRender}
+                    style={{ flex: 1, width: '100%', height: '100%', borderRadius: radii.lg }}
+                    objectFit="contain"
+                    mirror={true}
                 />
             ) : (
                 <View style={styles.pipInner}>
@@ -677,6 +849,11 @@ function LocalPiPView({ isCameraOn, doctorInitials }: { isCameraOn: boolean; doc
                             <Text style={styles.pipLabel}>Camera off</Text>
                         </>
                     )}
+                </View>
+            )}
+            {!isMicOn && (
+                <View style={statusStyles.pipMicBadge}>
+                    <Feather name="mic-off" size={10} color="#FFFFFF" />
                 </View>
             )}
         </View>

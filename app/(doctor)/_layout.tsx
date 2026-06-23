@@ -9,27 +9,51 @@
  * Uses useSafeAreaInsets() to dynamically pad above the system nav bar.
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Tabs, Redirect } from 'expo-router';
+import { Tabs, Redirect, useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
+import { getMe } from '@/services/doctor';
+import FloatingCallBar from '@/components/FloatingCallBar';
+import { useActiveCall } from '@/providers/ActiveCallProvider';
+
+// Height of the call bar content that overlaps screen content (buttons + paddingBottom)
+const CALL_BAR_OVERLAP = 44;
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/useAuth';
 import { DoctorThemeProvider, useTheme } from '@/providers/ThemeProvider';
 import { doctorColors, typography as staticTypography, shadows } from '@/constants/theme';
 import DoctorActionPopover from '@/components/doctor/DoctorActionPopover';
 import NewPrescriptionModal from '@/components/doctor/NewPrescriptionModal';
+import PrescriptionTypeSheet from '@/components/doctor/PrescriptionTypeSheet';
 import AddPatientModal from '@/components/doctor/AddPatientModal';
+import type { PatientProfile } from '@/services/types';
 
 const TAB_INACTIVE_COLOR = '#94A3B8';
 
+function dobToAge(dob: string | null | undefined): string {
+    if (!dob) return '';
+    const birth = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    return age > 0 ? String(age) : '';
+}
+
 function DoctorTabsInner() {
     const { colors, typography } = useTheme();
+    const { activeCall } = useActiveCall();
     const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+    const [isTypeSheetOpen, setIsTypeSheetOpen] = useState(false);
     const [isPrescriptionOpen, setIsPrescriptionOpen] = useState(false);
     const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
+    const [rxPatient, setRxPatient] = useState<PatientProfile | null>(null);
 
     return (
-        <>
+        <View style={{ flex: 1 }}>
+            {/* Push all tab content down when the call bar is overlaying the top */}
+            <View style={{ flex: 1, paddingTop: activeCall ? CALL_BAR_OVERLAP : 0 }}>
             <Tabs
                 screenOptions={{
                     headerShown: false,
@@ -116,7 +140,7 @@ function DoctorTabsInner() {
                 {/* ── Hidden routes (no tab bar entry) ── */}
                 <Tabs.Screen
                     name="consultation/[id]"
-                    options={{ href: null }}
+                    options={{ href: null, tabBarStyle: { display: 'none' } }}
                 />
             </Tabs>
 
@@ -126,7 +150,7 @@ function DoctorTabsInner() {
                 onClose={() => setIsActionMenuOpen(false)}
                 onPrescription={() => {
                     setIsActionMenuOpen(false);
-                    setIsPrescriptionOpen(true);
+                    setIsTypeSheetOpen(true);
                 }}
                 onAddPatient={() => {
                     setIsActionMenuOpen(false);
@@ -135,23 +159,76 @@ function DoctorTabsInner() {
             />
 
             {/* ── Global Modals ── */}
+            <PrescriptionTypeSheet
+                visible={isTypeSheetOpen}
+                onClose={() => setIsTypeSheetOpen(false)}
+                onIndependentPrescription={() => {
+                    setRxPatient(null);
+                    setIsTypeSheetOpen(false);
+                    setIsPrescriptionOpen(true);
+                }}
+                onPatientPrescription={(patient) => {
+                    setRxPatient(patient);
+                    setIsTypeSheetOpen(false);
+                    setIsPrescriptionOpen(true);
+                }}
+            />
             <NewPrescriptionModal
                 visible={isPrescriptionOpen}
-                onClose={() => setIsPrescriptionOpen(false)}
-                patientName=""
+                onClose={() => {
+                    setIsPrescriptionOpen(false);
+                    setRxPatient(null);
+                }}
+                patientId={rxPatient?.id}
+                patientName={rxPatient?.full_name ?? ''}
+                patientAge={dobToAge(rxPatient?.date_of_birth)}
+                patientGender={rxPatient?.gender ?? ''}
             />
             <AddPatientModal
                 visible={isAddPatientOpen}
                 onClose={() => setIsAddPatientOpen(false)}
             />
-        </>
+            </View>
+            <FloatingCallBar />
+        </View>
     );
 }
 
 export default function DoctorTabLayout() {
-    const { user, isLoading } = useAuth();
+    const { user, token, isLoading, logout } = useAuth();
+    const router = useRouter();
+    const [onboardingStatus, setOnboardingStatus] = useState<'checking' | 'ok'>('checking');
+    const redirectingRef = useRef(false);
 
-    if (isLoading) return null;
+    useEffect(() => {
+        if (isLoading) return;
+
+        if (!user || user.role !== 'DOCTOR' || !token) {
+            if (!redirectingRef.current) setOnboardingStatus('ok');
+            return;
+        }
+
+        getMe(token)
+            .then(async (me) => {
+                if (me.onboarding_completed === false && !redirectingRef.current) {
+                    redirectingRef.current = true;
+                    await SecureStore.setItemAsync('careconnect_onboarding_token', token);
+                    await SecureStore.setItemAsync('careconnect_onboarding_user', JSON.stringify({
+                        user_id: user.id,
+                        role: user.role,
+                        hospital_id: user.hospitalId || 'unassigned',
+                    }));
+                    await logout();
+                    router.replace('/(auth)/doctor-onboarding');
+                } else {
+                    setOnboardingStatus('ok');
+                }
+            })
+            .catch(() => setOnboardingStatus('ok'));
+    }, [isLoading, user, token]);
+
+    if (isLoading || onboardingStatus === 'checking') return null;
+    if (redirectingRef.current) return null;
     if (!user) return <Redirect href="/(auth)/doctor-login" />;
     if (user.role === 'CAREGIVER') return <Redirect href="/(caregiver)" />;
     if (user.role !== 'DOCTOR') return <Redirect href="/(auth)/doctor-login" />;

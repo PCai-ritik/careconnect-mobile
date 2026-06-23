@@ -19,8 +19,9 @@ import {
     ActivityIndicator,
     Animated,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { ThemedBottomSheet } from '@/components/shared/ThemedBottomSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import useSwipeDown from '@/hooks/useSwipeDown';
 import { Feather } from '@expo/vector-icons';
 import {
     spacing,
@@ -56,10 +57,10 @@ function formatAadhar(value: string): string {
 export default function AddPatientModal({ visible, onClose, onPatientAdded }: AddPatientModalProps) {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
-    const { panHandlers, animatedStyle } = useSwipeDown(onClose);
     const [fullName, setFullName] = useState('');
     const [phone, setPhone] = useState('');
     const [dateOfBirth, setDateOfBirth] = useState('');
+    const [showDatePicker, setShowDatePicker] = useState(false);
     const [gender, setGender] = useState('');
     const [aadharNumber, setAadharNumber] = useState('');
     const [bloodGroup, setBloodGroup] = useState('');
@@ -97,8 +98,6 @@ export default function AddPatientModal({ visible, onClose, onPatientAdded }: Ad
             await addPatient(token, {
                 full_name: fullName.trim(),
                 whatsapp_number: phone.trim(),
-                hospital_id: '', // Will be resolved by backend from token
-                caregiver_id: '', // Will be resolved by backend from token
                 date_of_birth: dateOfBirth.trim() || undefined,
                 gender: gender || undefined,
                 blood_group: bloodGroup || undefined,
@@ -120,18 +119,11 @@ export default function AddPatientModal({ visible, onClose, onPatientAdded }: Ad
 
     return (
         <>
-            <Modal
-                animationType="slide"
-                transparent
-                visible={visible}
-                onRequestClose={onClose}
-            >
-                <Pressable style={s.backdrop} onPress={onClose} />
+            <ThemedBottomSheet visible={visible} onClose={onClose}>
+                
 
-                <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom, backgroundColor: colors.surface }]}>
-                    <View style={s.handleRow} {...panHandlers}>
-                        <View style={[s.handle, { backgroundColor: colors.border }]} />
-                    </View>
+                
+                    
 
                     {/* Header */}
                     <View style={s.header}>
@@ -170,13 +162,17 @@ export default function AddPatientModal({ visible, onClose, onPatientAdded }: Ad
                         />
 
                         <ThemedText color="secondary" weight="medium" size="sm" style={s.label}>Date of Birth <ThemedText color="brand" weight="medium" size="sm" style={{ color: "#EF4444" }}>*</ThemedText></ThemedText>
-                        <TextInput
-                            style={[s.input, { borderColor: colors.borderLight, color: colors.textPrimary, backgroundColor: colors.surface }]}
-                            value={dateOfBirth}
-                            onChangeText={setDateOfBirth}
-                            placeholder="DD/MM/YYYY"
-                            placeholderTextColor={colors.textMuted}
-                        />
+                        <Pressable
+                            onPress={() => setShowDatePicker(true)}
+                            style={[s.input, { borderColor: colors.borderLight, backgroundColor: colors.surface }, { justifyContent: 'center' }]}
+                        >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <ThemedText color={dateOfBirth ? 'primary' : 'muted'} size="sm">
+                                    {dateOfBirth || 'Select date of birth'}
+                                </ThemedText>
+                                <Feather name="calendar" size={18} color={colors.textMuted} />
+                            </View>
+                        </Pressable>
 
                         <ThemedText color="secondary" weight="medium" size="sm" style={s.label}>Gender</ThemedText>
                         <View style={s.chipRow}>
@@ -305,8 +301,26 @@ export default function AddPatientModal({ visible, onClose, onPatientAdded }: Ad
                             )}
                         </Pressable>
                     </View>
-                </Animated.View>
-            </Modal>
+                
+            </ThemedBottomSheet>
+
+            {showDatePicker && (
+                <DateTimePicker
+                    value={dateOfBirth ? new Date(dateOfBirth) : new Date()}
+                    mode="date"
+                    display="spinner"
+                    onChange={(event, selectedDate) => {
+                        if (event.type === 'set' && selectedDate) {
+                            const year = selectedDate.getFullYear();
+                            const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                            const day = String(selectedDate.getDate()).padStart(2, '0');
+                            setDateOfBirth(`${year}-${month}-${day}`);
+                        }
+                        setShowDatePicker(false);
+                    }}
+                    maximumDate={new Date()}
+                />
+            )}
 
             <ThemedAlert
                 visible={showSuccess}
@@ -326,19 +340,10 @@ export default function AddPatientModal({ visible, onClose, onPatientAdded }: Ad
 }
 
 const s = StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-    sheet: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: SCREEN_HEIGHT * 0.85,
-        borderTopLeftRadius: radii.xl,
-        borderTopRightRadius: radii.xl,
-        ...shadows.elevated,
-    },
-    handleRow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
-    handle: { width: 40, height: 4, borderRadius: 2 },
+    
+    
+    
+    
     header: {
         flexDirection: 'row',
         alignItems: 'flex-start',

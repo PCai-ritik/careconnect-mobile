@@ -1,41 +1,34 @@
 /**
  * CareConnect — Edit Profile Modal (Doctor)
  *
- * 85%-height Bottom Sheet with a traditional form for editing
- * doctor profile details. Pre-fills from DoctorProfile prop.
- * Calls PATCH /doctors/profile on save.
- * Uses doctorColors + StyleSheet.create().
+ * Comprehensive bottom sheet matching the web EditProfileSheet 1:1.
+ * Sections: Personal Information, Practice Details, Consultation Fees.
+ * Fully multi-tenant via useTheme().
  */
 
 import { useState, useEffect } from 'react';
 import {
     View,
     Text,
-    Modal,
     Pressable,
     ScrollView,
     TextInput,
     StyleSheet,
-    Dimensions,
-    Animated,
     ActivityIndicator,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import useSwipeDown from '@/hooks/useSwipeDown';
+import { ThemedBottomSheet } from '@/components/shared/ThemedBottomSheet';
 import { Feather } from '@expo/vector-icons';
-import {
-    spacing,
-    doctorColors,
-    typography,
-    shadows,
-    radii,
-} from '@/constants/theme';
+import { spacing, radii, typography } from '@/constants/theme';
+import { useTheme } from '@/providers/ThemeProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { updateDoctorProfile } from '@/services/doctor';
 import type { DoctorProfile } from '@/services/types';
 import ThemedAlert from '@/components/doctor/ThemedAlert';
+import { ThemedText } from '@/components/shared/Themed';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface EditProfileModalProps {
     visible: boolean;
@@ -44,30 +37,173 @@ interface EditProfileModalProps {
     onSaved?: () => void;
 }
 
+interface FormFields {
+    fullName: string;
+    specialization: string;
+    phone: string;
+    licenseNumber: string;
+    clinicName: string;
+    clinicAddress: string;
+    videoFee: string;
+    inPersonFee: string;
+    bio: string;
+}
+
+const EMPTY_FORM: FormFields = {
+    fullName: '',
+    specialization: '',
+    phone: '',
+    licenseNumber: '',
+    clinicName: '',
+    clinicAddress: '',
+    videoFee: '',
+    inPersonFee: '',
+    bio: '',
+};
+
+// ─── Field Sub-Component ─────────────────────────────────────────────────────
+
+function Field({
+    label,
+    value,
+    onChangeText,
+    placeholder,
+    icon,
+    keyboardType,
+    multiline,
+}: {
+    label: string;
+    value: string;
+    onChangeText: (text: string) => void;
+    placeholder: string;
+    icon: keyof typeof Feather.glyphMap;
+    keyboardType?: 'default' | 'numeric' | 'phone-pad' | 'email-address';
+    multiline?: boolean;
+}) {
+    const { colors } = useTheme();
+    return (
+        <View style={fs.group}>
+            <Text style={[fs.label, { color: colors.textMuted }]}>{label}</Text>
+            <View style={[
+                fs.inputWrap,
+                { borderColor: colors.borderLight, backgroundColor: colors.surface },
+                multiline && fs.inputWrapMulti,
+            ]}>
+                <Feather
+                    name={icon}
+                    size={15}
+                    color={colors.textMuted}
+                    style={fs.icon}
+                />
+                <TextInput
+                    style={[
+                        fs.input,
+                        { color: colors.textPrimary },
+                        multiline && fs.inputMulti,
+                    ]}
+                    value={value}
+                    onChangeText={onChangeText}
+                    placeholder={placeholder}
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType={keyboardType ?? 'default'}
+                    multiline={multiline}
+                    textAlignVertical={multiline ? 'top' : 'center'}
+                />
+            </View>
+        </View>
+    );
+}
+
+const fs = StyleSheet.create({
+    group: { marginBottom: spacing.lg },
+    label: {
+        fontFamily: typography.fontFamily.semiBold,
+        fontSize: 11,
+        letterSpacing: 0.5,
+        textTransform: 'uppercase',
+        marginBottom: spacing.xs,
+    },
+    inputWrap: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderRadius: radii.md,
+        paddingHorizontal: spacing.md,
+        minHeight: 44,
+    },
+    inputWrapMulti: {
+        alignItems: 'flex-start',
+        paddingVertical: spacing.md,
+    },
+    icon: { marginRight: spacing.sm, marginTop: 1 },
+    input: {
+        flex: 1,
+        fontFamily: typography.fontFamily.regular,
+        fontSize: 14,
+        paddingVertical: 0,
+    },
+    inputMulti: {
+        minHeight: 72,
+        paddingTop: 0,
+    },
+});
+
+// ─── Section Label ────────────────────────────────────────────────────────────
+
+function SectionLabel({ label }: { label: string }) {
+    const { colors } = useTheme();
+    return (
+        <View style={[sl.row, { borderBottomColor: colors.borderLight }]}>
+            <Text style={[sl.text, { color: colors.textMuted }]}>{label}</Text>
+        </View>
+    );
+}
+
+const sl = StyleSheet.create({
+    row: {
+        borderBottomWidth: 1,
+        paddingBottom: spacing.xs,
+        marginBottom: spacing.lg,
+        marginTop: spacing.xl,
+    },
+    text: {
+        fontFamily: typography.fontFamily.bold,
+        fontSize: 11,
+        letterSpacing: 0.8,
+        textTransform: 'uppercase',
+    },
+});
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 export default function EditProfileModal({ visible, onClose, profile, onSaved }: EditProfileModalProps) {
-    const insets = useSafeAreaInsets();
-    const { panHandlers, animatedStyle } = useSwipeDown(onClose);
+    const { colors } = useTheme();
     const { token } = useAuth();
 
-    const [fullName, setFullName] = useState('');
-    const [specialization, setSpecialization] = useState('');
-    const [regNumber, setRegNumber] = useState('');
-    const [fee, setFee] = useState('');
-    const [phone, setPhone] = useState('');
-    const [bio, setBio] = useState('');
+    const [form, setForm] = useState<FormFields>(EMPTY_FORM);
     const [isSaving, setIsSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
 
-    // Pre-fill form from profile when modal opens
+    const set = (field: keyof FormFields) => (value: string) =>
+        setForm(prev => ({ ...prev, [field]: value }));
+
     useEffect(() => {
         if (visible && profile) {
-            setFullName(profile.full_name ?? '');
-            setSpecialization(profile.specialization ?? '');
-            setRegNumber(profile.license_number ?? '');
-            setFee(profile.consultation_fee?.toString() ?? '');
-            setPhone(profile.phone_number ?? '');
-            setBio(profile.bio ?? '');
+            setForm({
+                fullName: profile.full_name ?? '',
+                specialization: profile.specialization ?? '',
+                phone: profile.phone_number ?? '',
+                licenseNumber: profile.license_number ?? '',
+                clinicName: profile.clinic_name ?? '',
+                clinicAddress: profile.clinic_address ?? '',
+                videoFee: profile.video_consultation_fee != null
+                    ? String(profile.video_consultation_fee) : '',
+                inPersonFee: profile.in_person_consultation_fee != null
+                    ? String(profile.in_person_consultation_fee) : '',
+                bio: profile.bio ?? '',
+            });
         }
+        if (!visible) setShowSuccess(false);
     }, [visible, profile]);
 
     const handleSave = async () => {
@@ -75,12 +211,15 @@ export default function EditProfileModal({ visible, onClose, profile, onSaved }:
         setIsSaving(true);
         try {
             await updateDoctorProfile(token, {
-                full_name: fullName.trim() || undefined,
-                specialization: specialization.trim() || undefined,
-                license_number: regNumber.trim() || undefined,
-                consultation_fee: fee ? parseFloat(fee) : undefined,
-                phone_number: phone.trim() || undefined,
-                bio: bio.trim() || undefined,
+                full_name: form.fullName.trim() || undefined,
+                specialization: form.specialization.trim() || undefined,
+                phone_number: form.phone.trim() || undefined,
+                license_number: form.licenseNumber.trim() || undefined,
+                clinic_name: form.clinicName.trim() || undefined,
+                clinic_address: form.clinicAddress.trim() || undefined,
+                video_consultation_fee: form.videoFee ? parseFloat(form.videoFee) : undefined,
+                in_person_consultation_fee: form.inPersonFee ? parseFloat(form.inPersonFee) : undefined,
+                bio: form.bio.trim() || undefined,
             });
             setShowSuccess(true);
             onSaved?.();
@@ -93,98 +232,140 @@ export default function EditProfileModal({ visible, onClose, profile, onSaved }:
 
     return (
         <>
-            <Modal
-                animationType="slide"
-                transparent
-                visible={visible}
-                onRequestClose={onClose}
-            >
-                {/* Backdrop */}
-                <Pressable style={s.backdrop} onPress={onClose} />
-
-                {/* Sheet */}
-                <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom }]}>
-                    {/* Handle */}
-                    <View style={s.handleRow} {...panHandlers}>
-                        <View style={s.handle} />
+            <ThemedBottomSheet visible={visible} onClose={onClose}>
+                {/* Header */}
+                <View style={[s.header, { borderBottomColor: colors.borderLight }]}>
+                    <View style={[s.headerIcon, { backgroundColor: colors.primaryLight }]}>
+                        <Feather name="user" size={20} color={colors.primary} />
                     </View>
-
-                    {/* Header */}
-                    <View style={s.header}>
-                        <Text style={s.headerTitle}>Edit Profile</Text>
+                    <View style={s.headerText}>
+                        <ThemedText color="primary" weight="bold" size="xl">Edit Profile</ThemedText>
+                        <ThemedText color="muted" size="xs" style={{ marginTop: spacing.xxs }}>
+                            Update your personal &amp; practice details
+                        </ThemedText>
                     </View>
+                </View>
 
-                    {/* Form */}
-                    <ScrollView
-                        style={s.scrollArea}
-                        showsVerticalScrollIndicator={false}
-                        contentContainerStyle={s.scrollInner}
-                        keyboardShouldPersistTaps="handled"
+                {/* Form */}
+                <ScrollView
+                    style={s.scroll}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={s.scrollInner}
+                    keyboardShouldPersistTaps="handled"
+                >
+                    {/* ── Personal Information ── */}
+                    <SectionLabel label="Personal Information" />
+                    <Field
+                        label="Full Name"
+                        value={form.fullName}
+                        onChangeText={set('fullName')}
+                        placeholder="Dr. First Last"
+                        icon="user"
+                    />
+                    <Field
+                        label="Specialization"
+                        value={form.specialization}
+                        onChangeText={set('specialization')}
+                        placeholder="e.g. Cardiologist"
+                        icon="activity"
+                    />
+                    <Field
+                        label="Phone / WhatsApp"
+                        value={form.phone}
+                        onChangeText={set('phone')}
+                        placeholder="+91 XXXXX XXXXX"
+                        icon="phone"
+                        keyboardType="phone-pad"
+                    />
+                    <Field
+                        label="License / Registration No."
+                        value={form.licenseNumber}
+                        onChangeText={set('licenseNumber')}
+                        placeholder="e.g. NMC-78291"
+                        icon="file-text"
+                    />
+
+                    {/* ── Practice Details ── */}
+                    <SectionLabel label="Practice Details" />
+                    <Field
+                        label="Clinic / Hospital Name"
+                        value={form.clinicName}
+                        onChangeText={set('clinicName')}
+                        placeholder="e.g. Apollo Clinic"
+                        icon="home"
+                    />
+                    <Field
+                        label="Clinic / Hospital Address"
+                        value={form.clinicAddress}
+                        onChangeText={set('clinicAddress')}
+                        placeholder="123 Main St, City"
+                        icon="map-pin"
+                    />
+
+                    {/* ── Consultation Fees ── */}
+                    <SectionLabel label="Consultation Fees" />
+                    <Field
+                        label="Video Consultation Fee"
+                        value={form.videoFee}
+                        onChangeText={set('videoFee')}
+                        placeholder="e.g. 800"
+                        icon="video"
+                        keyboardType="numeric"
+                    />
+                    <Field
+                        label="In-Person Consultation Fee"
+                        value={form.inPersonFee}
+                        onChangeText={set('inPersonFee')}
+                        placeholder="e.g. 1000"
+                        icon="user-check"
+                        keyboardType="numeric"
+                    />
+
+                    {/* ── Bio ── */}
+                    <SectionLabel label="Bio / About" />
+                    <Field
+                        label="Bio"
+                        value={form.bio}
+                        onChangeText={set('bio')}
+                        placeholder="A short bio about your practice..."
+                        icon="align-left"
+                        multiline
+                    />
+                </ScrollView>
+
+                {/* Footer */}
+                <View style={[s.footer, { borderTopColor: colors.borderLight }]}>
+                    <Pressable
+                        onPress={onClose}
+                        style={({ pressed }) => [
+                            s.cancelBtn,
+                            { borderColor: colors.border },
+                            pressed && { opacity: 0.7 },
+                        ]}
                     >
-                        <Field
-                            label="Full Name"
-                            value={fullName}
-                            onChangeText={setFullName}
-                            placeholder="e.g., Dr. Robert Chen"
-                        />
-                        <Field
-                            label="Specialization"
-                            value={specialization}
-                            onChangeText={setSpecialization}
-                            placeholder="e.g., Cardiologist"
-                        />
-                        <Field
-                            label="Registration Number"
-                            value={regNumber}
-                            onChangeText={setRegNumber}
-                            placeholder="e.g., NMC-78291"
-                        />
-                        <Field
-                            label="Consultation Fee"
-                            value={fee}
-                            onChangeText={setFee}
-                            placeholder="e.g., 500"
-                            keyboardType="numeric"
-                        />
-                        <Field
-                            label="Phone Number"
-                            value={phone}
-                            onChangeText={setPhone}
-                            placeholder="e.g., +91 98765 43210"
-                            keyboardType="phone-pad"
-                        />
-                        <Field
-                            label="Bio"
-                            value={bio}
-                            onChangeText={setBio}
-                            placeholder="Brief professional bio..."
-                            multiline
-                        />
-                    </ScrollView>
-
-                    {/* Footer */}
-                    <View style={s.footer}>
-                        <Pressable
-                            onPress={handleSave}
-                            disabled={isSaving}
-                            style={({ pressed }) => [
-                                s.saveBtn,
-                                isSaving && { opacity: 0.6 },
-                                pressed && { backgroundColor: doctorColors.primaryDark },
-                            ]}
-                        >
-                            {isSaving ? (
-                                <ActivityIndicator size="small" color="#fff" />
-                            ) : (
-                                <>
-                                    <Feather name="check" size={18} color="#fff" />
-                                    <Text style={s.saveBtnText}>Save Changes</Text>
-                                </>
-                            )}
-                        </Pressable>
-                    </View>
-                </Animated.View>
-            </Modal>
+                        <Text style={[s.cancelBtnText, { color: colors.textPrimary }]}>Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                        onPress={handleSave}
+                        disabled={isSaving}
+                        style={({ pressed }) => [
+                            s.saveBtn,
+                            { backgroundColor: colors.primary },
+                            isSaving && { opacity: 0.6 },
+                            pressed && { opacity: 0.85 },
+                        ]}
+                    >
+                        {isSaving ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                            <>
+                                <Feather name="check" size={16} color="#fff" />
+                                <Text style={s.saveBtnText}>Save Changes</Text>
+                            </>
+                        )}
+                    </Pressable>
+                </View>
+            </ThemedBottomSheet>
 
             <ThemedAlert
                 visible={showSuccess}
@@ -202,127 +383,64 @@ export default function EditProfileModal({ visible, onClose, profile, onSaved }:
     );
 }
 
-// ─── Field Sub-Component ────────────────────────────────────────────────────
-
-function Field({
-    label,
-    value,
-    onChangeText,
-    placeholder,
-    keyboardType,
-    multiline,
-}: {
-    label: string;
-    value: string;
-    onChangeText: (text: string) => void;
-    placeholder: string;
-    keyboardType?: 'default' | 'numeric' | 'phone-pad';
-    multiline?: boolean;
-}) {
-    return (
-        <View style={s.fieldGroup}>
-            <Text style={s.fieldLabel}>{label}</Text>
-            <TextInput
-                style={[s.fieldInput, multiline && { minHeight: 80, textAlignVertical: 'top' as const }]}
-                value={value}
-                onChangeText={onChangeText}
-                placeholder={placeholder}
-                placeholderTextColor={doctorColors.textMuted}
-                keyboardType={keyboardType ?? 'default'}
-                multiline={multiline}
-            />
-        </View>
-    );
-}
-
-// ─── Styles ─────────────────────────────────────────────────────────────────
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-    sheet: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: SCREEN_HEIGHT * 0.85,
-        backgroundColor: doctorColors.surface,
-        borderTopLeftRadius: radii.xl,
-        borderTopRightRadius: radii.xl,
-        ...shadows.elevated,
-    },
-    handleRow: {
-        alignItems: 'center',
-        paddingTop: spacing.md,
-        paddingBottom: spacing.xs,
-    },
-    handle: {
-        width: 40,
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: doctorColors.border,
-    },
-
-    // Header
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        gap: spacing.md,
         paddingHorizontal: spacing.xl,
         paddingVertical: spacing.lg,
+        borderBottomWidth: 1,
     },
-    headerTitle: {
-        fontFamily: typography.fontFamily.bold,
-        ...typography.size.xl,
-        color: doctorColors.textPrimary,
+    headerIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: radii.md,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
+    headerText: { flex: 1 },
 
-
-    // Form
-    scrollArea: { flex: 1 },
+    scroll: { flex: 1 },
     scrollInner: {
         paddingHorizontal: spacing.xl,
-        paddingBottom: spacing.xl,
-    },
-    fieldGroup: {
-        marginBottom: spacing.xl,
-    },
-    fieldLabel: {
-        fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
-        marginBottom: spacing.sm,
-    },
-    fieldInput: {
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
-        borderRadius: radii.md,
-        backgroundColor: '#F8FAFC',
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.md,
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textPrimary,
+        paddingTop: spacing.md,
+        paddingBottom: spacing['6xl'],
     },
 
-    // Footer
     footer: {
+        flexDirection: 'row',
+        gap: spacing.md,
         paddingHorizontal: spacing.xl,
         paddingVertical: spacing.lg,
         borderTopWidth: 1,
-        borderTopColor: doctorColors.borderLight,
+    },
+    cancelBtn: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: spacing.md,
+        borderRadius: radii.md,
+        borderWidth: 1,
+    },
+    cancelBtnText: {
+        fontFamily: typography.fontFamily.medium,
+        fontSize: 14,
     },
     saveBtn: {
+        flex: 2,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: spacing.sm,
-        paddingVertical: spacing.lg,
+        paddingVertical: spacing.md,
         borderRadius: radii.md,
-        backgroundColor: doctorColors.primary,
     },
     saveBtnText: {
         fontFamily: typography.fontFamily.semiBold,
-        ...typography.size.base,
+        fontSize: 14,
         color: '#FFFFFF',
     },
 });

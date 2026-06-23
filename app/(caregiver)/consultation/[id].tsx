@@ -26,7 +26,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
+import { useActiveCall } from '@/providers/ActiveCallProvider';
 import {
     spacing,
     typography,
@@ -90,10 +92,14 @@ const VC = {
 export default function ConsultationScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
+    const navigation = useNavigation();
     const { token } = useAuth();
     const { colors } = useTheme();
     const styles = useStyles(colors);
     const statusStyles = useStatusStyles(colors);
+    const { activeCall, minimizeCall, clearCall } = useActiveCall();
+    const activeCallRef = useRef(activeCall);
+    useEffect(() => { activeCallRef.current = activeCall; }, [activeCall]);
 
     const [hasPermissions, setHasPermissions] = useState(false);
     const [audioReady, setAudioReady] = useState(false);
@@ -116,6 +122,10 @@ export default function ConsultationScreen() {
     const [joinTokenStr, setJoinTokenStr] = useState<string | null>(null);
     const [lkError, setLkError] = useState<string | null>(null);
     const [waitingForDoctor, setWaitingForDoctor] = useState(false);
+
+    // ── Triggers a fresh LiveKit token fetch on re-entry after an ended call ──
+    const [sessionKey, setSessionKey] = useState(0);
+    const isFirstFocusRef = useRef(true);
 
     // -- Fetch doctor name from appointment data --
     useEffect(() => {
@@ -172,7 +182,7 @@ export default function ConsultationScreen() {
             cancelled = true;
             if (retryTimer) clearTimeout(retryTimer);
         };
-    }, [token, id]);
+    }, [token, id, sessionKey]);
 
     // -- Boot Audio Hardware ONLY after permissions are granted --
     // -- Boot Audio Hardware ONLY after permissions are granted --
@@ -196,17 +206,8 @@ export default function ConsultationScreen() {
         };
     }, [hasPermissions]);
 
-    // -- Call timer --
+    // -- Call timer — managed entirely through useFocusEffect --
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-    useEffect(() => {
-        timerRef.current = setInterval(() => {
-            setElapsed((e) => e + 1);
-        }, 1000);
-        return () => {
-            if (timerRef.current) clearInterval(timerRef.current);
-        };
-    }, []);
 
     const formatTime = (totalSeconds: number) => {
         const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
@@ -214,15 +215,106 @@ export default function ConsultationScreen() {
         return `${m}:${s}`;
     };
 
-    // -- Actions --
-    const handleEndCall = useCallback(async () => {
+    // ── Navigation exit control ──
+    const intentionalExitRef = useRef(false);
+    const minimizingRef = useRef(false);
+
+    // ── Refs to always capture latest mic/elapsed without stale closures ──
+    const isMicOnRef = useRef(isMicOn);
+    useEffect(() => { isMicOnRef.current = isMicOn; }, [isMicOn]);
+    const elapsedRef = useRef(elapsed);
+    useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
+
+    // ── Track whether the doctor (remote) ever joined ──
+    const doctorJoinedRef = useRef(false);
+
+    // ── Focus lifecycle: reset state for fresh calls, restore state after minimize ──
+    useFocusEffect(useCallback(() => {
+        const prev = activeCallRef.current;
+
+        if (prev) {
+            // Returning from the floating bar → restore exactly where we left off
+            setElapsed(prev.elapsed);
+            setIsMicOn(prev.isMicOn);
+        } else if (!isFirstFocusRef.current) {
+            // Re-entering after ending a previous call → full clean slate
+            setElapsed(0);
+            setIsMicOn(true);
+            setIsCameraOn(true);
+            setJoinTokenStr(null);
+            setLkError(null);
+            setWaitingForDoctor(false);
+            doctorJoinedRef.current = false;
+            // Bump sessionKey so the getJoinToken effect re-runs for the new session
+            setSessionKey((k) => k + 1);
+        }
+        isFirstFocusRef.current = false;
+
+        clearCall();
+        intentionalExitRef.current = false;
+        minimizingRef.current = false;
+
+        // Start (or restart) the call timer
         if (timerRef.current) clearInterval(timerRef.current);
-        await AudioSession.stopAudioSession();
+        timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
+
+        // On blur (minimize or navigate away) stop the timer
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []));
+
+    // ── Intercept back navigation → minimize instead of ending the call ──
+    const handleMinimize = useCallback(() => {
+        if (minimizingRef.current) return;
+        minimizingRef.current = true;
+        minimizeCall({
+            appointmentId: id as string,
+            name: doctorName,
+            role: 'caregiver',
+            elapsed: elapsedRef.current,
+            isMicOn: isMicOnRef.current,
+        });
+        if (router.canGoBack()) {
+            router.back();
+        } else {
+            router.replace('/(caregiver)' as any);
+        }
+    }, [id, doctorName, minimizeCall, router]);
+
+    useEffect(() => {
+        const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
+            if (intentionalExitRef.current || minimizingRef.current) return;
+            e.preventDefault();
+            handleMinimize();
+        });
+        return unsubscribe;
+    }, [navigation, handleMinimize]);
+
+    // -- Actions --
+    const handleEndCall = useCallback(() => {
+        intentionalExitRef.current = true;
+        clearCall();
+        if (timerRef.current) clearInterval(timerRef.current);
+
+        // Unmount LiveKitRoom for a graceful client-side disconnect
+        setJoinTokenStr(null);
+
+        // Navigate INSTANTLY
         router.replace({
             pathname: '/(caregiver)/post-call-summary',
             params: { appointmentId: id },
         } as any);
-    }, [router, id]);
+
+        // Background: stop audio after LiveKit has disconnected
+        setTimeout(async () => {
+            try { await AudioSession.stopAudioSession(); } catch { /* ignore */ }
+        }, 300);
+    }, [router, id, clearCall]);
 
     const getInitials = (name: string) =>
         name.split(' ').map((n) => n[0]).join('');
@@ -234,7 +326,7 @@ export default function ConsultationScreen() {
             {/* ── Doctor's Video Background ── */}
             <View style={styles.videoBackground}>
                 {joinTokenStr ? (
-                    <RemoteVideoView doctorName={doctorName} />
+                    <RemoteVideoView doctorName={doctorName} doctorJoinedRef={doctorJoinedRef} />
                 ) : (
                     <>
                         <View style={styles.docAvatarLarge}>
@@ -249,22 +341,25 @@ export default function ConsultationScreen() {
 
             {/* ── Floating Header ── */}
             <SafeAreaView style={styles.headerOverlay} edges={['top']}>
-                {/* Back button */}
+                {/* Back button — minimizes the call */}
                 <Pressable
                     style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.7 }]}
-                    onPress={() => router.back()}
+                    onPress={handleMinimize}
                 >
                     <Feather name="chevron-left" size={22} color={VC.text} />
                 </Pressable>
 
-                {/* Center: timer + name */}
+                {/* Center: timer + name + mute indicator */}
                 <View style={styles.headerCenter}>
                     <View style={styles.timerPill}>
                         <View style={styles.pulseDot} />
                         <Text style={styles.timerText}>{formatTime(elapsed)}</Text>
                     </View>
                     <Text style={styles.headerDocName}>{doctorName}</Text>
-                    <Text style={styles.headerDocSpec}>Video Consultation</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.headerDocSpec}>Video Consultation</Text>
+                        {joinTokenStr && <DoctorMuteIndicator />}
+                    </View>
                 </View>
 
                 {/* Spacer to balance the back button */}
@@ -349,7 +444,7 @@ export default function ConsultationScreen() {
 // LiveKit sub-components — must be children of <LiveKitRoom>
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function RemoteVideoView({ doctorName }: { doctorName: string }) {
+function RemoteVideoView({ doctorName, doctorJoinedRef }: { doctorName: string; doctorJoinedRef: React.MutableRefObject<boolean> }) {
     const { colors } = useTheme();
     const styles = useStyles(colors);
     const statusStyles = useStatusStyles(colors);
@@ -359,6 +454,12 @@ function RemoteVideoView({ doctorName }: { doctorName: string }) {
     );
     const remoteParticipants = useRemoteParticipants();
     const remote = remoteParticipants[0];
+
+    useEffect(() => {
+        if (remoteParticipants.length > 0) {
+            doctorJoinedRef.current = true;
+        }
+    }, [remoteParticipants.length, doctorJoinedRef]);
 
     const remoteTrack = tracks.find(
         (t: any) => !t.participant.isLocal && t.source === Track.Source.Camera
@@ -376,11 +477,6 @@ function RemoteVideoView({ doctorName }: { doctorName: string }) {
                     <Feather name="video-off" size={48} color={VC.textMuted} />
                 </View>
                 <Text style={styles.docVideoLabel}>{doctorName} turned off their camera</Text>
-                {!isMicOn && (
-                    <View style={statusStyles.remoteMicBadge}>
-                        <Feather name="mic-off" size={14} color="#FFFFFF" />
-                    </View>
-                )}
             </>
         );
     }
@@ -394,11 +490,6 @@ function RemoteVideoView({ doctorName }: { doctorName: string }) {
                     style={{ flex: 1, width: '100%', height: '100%' }}
                     objectFit="contain"
                 />
-                {!isMicOn && (
-                    <View style={statusStyles.remoteMicBadge}>
-                        <Feather name="mic-off" size={14} color="#FFFFFF" />
-                    </View>
-                )}
             </View>
         );
     }
@@ -411,6 +502,30 @@ function RemoteVideoView({ doctorName }: { doctorName: string }) {
             </View>
             <Text style={styles.docVideoLabel}>Waiting for {doctorName} to join…</Text>
         </>
+    );
+}
+
+// Renders an inline muted pill when the doctor's mic is off.
+// Must be its own component so it can call useRemoteParticipants() inside LiveKitRoom.
+function DoctorMuteIndicator() {
+    const remoteParticipants = useRemoteParticipants();
+    const remote = remoteParticipants[0];
+    const isMicOn = remote?.isMicrophoneEnabled ?? true;
+    if (isMicOn || !remote) return null;
+    return (
+        <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            backgroundColor: 'rgba(239,68,68,0.18)',
+            borderRadius: 10,
+            paddingHorizontal: 7,
+            paddingVertical: 3,
+            marginTop: 2,
+        }}>
+            <Feather name="mic-off" size={11} color={VC.red} />
+            <Text style={{ color: VC.red, fontSize: 11, fontWeight: '600' }}>Muted</Text>
+        </View>
     );
 }
 

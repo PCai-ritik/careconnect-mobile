@@ -149,9 +149,14 @@ export default function ProfileScreen() {
     const avatarBg = AVATAR_COLORS[hashName(doctorName) % AVATAR_COLORS.length];
     const specialization = profile?.specialization ?? '—';
     const licenseNumber = profile?.license_number ?? '—';
-    const consultationFee = profile?.consultation_fee
-        ? `${profile.currency === 'INR' ? '₹' : profile.currency} ${profile.consultation_fee}`
+    const videoFee = profile?.video_consultation_fee
+        ? `${profile.currency === 'INR' ? '₹' : profile.currency} ${profile.video_consultation_fee}`
         : '—';
+    const inPersonFee = profile?.in_person_consultation_fee
+        ? `${profile.currency === 'INR' ? '₹' : profile.currency} ${profile.in_person_consultation_fee}`
+        : '—';
+    const clinicName = profile?.clinic_name ?? '—';
+    const clinicAddress = profile?.clinic_address ?? '—';
     const whatsappNumber = profile?.phone_number ?? '—';
 
     return (
@@ -191,9 +196,27 @@ export default function ProfileScreen() {
                 <ThemedText color="muted" weight="semiBold" size="sm" style={s.groupTitle}>Practice Details</ThemedText>
                 <ThemedView bg="surface" rounded style={s.card}>
                     <SettingsRow
-                        icon="dollar-sign"
-                        label="Consultation Fee"
-                        rightText={consultationFee}
+                        icon="video"
+                        label="Video Consultation Fee"
+                        rightText={videoFee}
+                        showBorder
+                    />
+                    <SettingsRow
+                        icon="map-pin"
+                        label="In-Person Fee"
+                        rightText={inPersonFee}
+                        showBorder
+                    />
+                    <SettingsRow
+                        icon="home"
+                        label="Clinic Name"
+                        rightText={clinicName}
+                        showBorder
+                    />
+                    <SettingsRow
+                        icon="map"
+                        label="Clinic Address"
+                        subtitle={clinicAddress}
                         showBorder
                     />
                     <SettingsRow

@@ -61,6 +61,7 @@ export interface DoctorAvailabilitySlot {
     start_time: string;     // HH:MM:SS
     end_time: string;       // HH:MM:SS
     is_enabled: boolean;
+    appointment_type?: 'VIDEO' | 'IN_PERSON';
 }
 
 /** Maps to backend schemas.DoctorResponse */
@@ -75,7 +76,10 @@ export interface DoctorProfile {
     bio: string | null;
     license_number: string | null;
     consultation_duration_minutes: number | null;
-    consultation_fee: number | null;
+    video_consultation_fee: number | null;
+    in_person_consultation_fee: number | null;
+    clinic_name: string | null;
+    clinic_address: string | null;
     currency: string;
     accepted_payment_methods: string[] | null;
     onboarding_completed: boolean;
@@ -88,8 +92,9 @@ export interface DoctorProfile {
 export interface PatientCreate {
     full_name: string;
     whatsapp_number: string;
-    caregiver_id: string;
-    hospital_id: string;
+    caregiver_id?: string;
+    doctor_id?: string;
+    hospital_id?: string;
     date_of_birth?: string;
     gender?: string;
     blood_group?: string;
@@ -231,4 +236,5 @@ export interface MeResponse {
     role: string;
     hospital_id: string;
     affiliation_status?: 'PENDING' | 'APPROVED' | 'REJECTED';
+    onboarding_completed?: boolean;
 }

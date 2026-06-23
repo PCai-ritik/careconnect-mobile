@@ -14,6 +14,7 @@
 import React, { createContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import type { AuthResponse } from '@/services/types';
+import { setApiCallbacks } from '@/services/api';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -113,6 +114,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setToken(null);
         setUser(null);
     }, []);
+
+    // Register API callbacks so that apiRequest can trigger UI updates/logout
+    useEffect(() => {
+        setApiCallbacks(
+            (newToken) => setToken(newToken),
+            () => {
+                // If refresh fails, apiRequest will call this
+                logout();
+            }
+        );
+    }, [logout]);
 
     return (
         <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>

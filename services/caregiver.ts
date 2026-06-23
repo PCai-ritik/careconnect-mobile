@@ -16,6 +16,7 @@ import type {
     PatientProfile,
     MedicalRecord,
     VideoJoinResponse,
+    AvailableSlot,
 } from './types';
 
 // ─── Hospitals (Public) ─────────────────────────────────────────────────────
@@ -52,7 +53,30 @@ export async function getDoctorsByHospital(
     });
 }
 
+/** Search all onboarded doctors by name, specialty, or location. Public endpoint. */
+export async function searchDoctors(query: string): Promise<DoctorProfile[]> {
+    const params = new URLSearchParams({ q: query });
+    return apiRequest<DoctorProfile[]>({
+        method: 'GET',
+        path: `/doctors/search?${params.toString()}`,
+    });
+}
+
 // ─── Appointments ───────────────────────────────────────────────────────────
+
+export async function getAvailableSlots(
+    token: string,
+    doctor_id: string,
+    date: string, // YYYY-MM-DD
+    appointment_type: string
+): Promise<AvailableSlot[]> {
+    return apiRequest<AvailableSlot[]>({
+        method: 'GET',
+        path: '/appointments/available-slots',
+        params: { doctor_id, date, appointment_type },
+        token,
+    });
+}
 
 /** Fetch all appointments scoped to the current user (RLS). */
 export async function getMyAppointments(token: string): Promise<Appointment[]> {
@@ -106,6 +130,7 @@ export async function addPatient(
         gender?: string;
         blood_group?: string;
         address?: string;
+        aadhar_number?: string;
         allergies?: string[];
         existing_conditions?: string[];
         emergency_contact_name?: string;

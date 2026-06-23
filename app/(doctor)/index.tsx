@@ -24,6 +24,7 @@ import { getDoctorProfile, getAppointments, getPatients, startVideoSession, getJ
 import type { DoctorProfile, Appointment, PatientProfile } from '@/services/types';
 import PatientChartModal from '@/components/doctor/PatientChartModal';
 import NewPrescriptionModal from '@/components/doctor/NewPrescriptionModal';
+import PrescriptionTypeSheet from '@/components/doctor/PrescriptionTypeSheet';
 import AvailabilityModal from '@/components/doctor/AvailabilityModal';
 import ActivityHistoryModal from '@/components/doctor/ActivityHistoryModal';
 import AddPatientModal from '@/components/doctor/AddPatientModal';
@@ -32,6 +33,16 @@ import { ThemedText, ThemedView } from '@/components/shared/Themed';
 import { useTheme } from '@/providers/ThemeProvider';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+function dobToAge(dob: string | null | undefined): string {
+    if (!dob) return '';
+    const birth = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    return age > 0 ? String(age) : '';
+}
 
 const AVATAR_COLORS = [
     '#C7D2FE', '#A5B4FC', '#BAE6FD', '#99F6E4',
@@ -170,6 +181,55 @@ function ActionPill({ action, onPress }: { action: QuickAction; onPress?: () => 
 
 function ScheduleRow({ appointment, onPress, onJoin, onShare }: { appointment: DisplayAppointment; onPress: () => void; onJoin: () => void; onShare: () => void }) {
     const { colors } = useTheme();
+    const isInPerson = appointment.appointment_type === 'IN_PERSON';
+    const endMs = new Date(appointment.scheduled_time).getTime() + (appointment.duration_minutes || 30) * 60000;
+    const isDone = appointment.status === 'COMPLETED' || appointment.status === 'CANCELLED';
+    const isProcessing = appointment.status === 'IN_PROGRESS' && endMs < Date.now();
+
+    const renderAction = () => {
+        if (isInPerson) {
+            return (
+                <Pressable
+                    style={({ pressed }) => [
+                        styles.viewPatientBtn,
+                        { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+                        pressed && { opacity: 0.7 },
+                    ]}
+                    onPress={onPress}
+                >
+                    <Feather name="user" size={13} color={colors.primary} />
+                    <ThemedText color="brand" weight="medium" size="xs">View Patient</ThemedText>
+                </Pressable>
+            );
+        }
+        if (isProcessing) {
+            return (
+                <View style={[styles.processingBadge, { backgroundColor: '#EEF2FF', borderColor: '#C7D2FE' }]}>
+                    <Feather name="loader" size={12} color="#6366F1" />
+                    <ThemedText weight="medium" size="xs" style={{ color: '#6366F1' }}>Processing…</ThemedText>
+                </View>
+            );
+        }
+        if (isDone) {
+            return (
+                <View style={[styles.processingBadge, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderLight }]}>
+                    <Feather name="check" size={12} color={colors.textMuted} />
+                    <ThemedText color="muted" weight="medium" size="xs">Done</ThemedText>
+                </View>
+            );
+        }
+        return (
+            <SmartJoinButton
+                scheduledTime={appointment.scheduled_time}
+                durationMinutes={appointment.duration_minutes || 30}
+                appointmentStatus={appointment.status}
+                role="doctor"
+                size="sm"
+                onPress={onJoin}
+            />
+        );
+    };
+
     return (
         <Pressable
             style={({ pressed }) => [
@@ -185,24 +245,19 @@ function ScheduleRow({ appointment, onPress, onJoin, onShare }: { appointment: D
                     {appointment.displayTime}  •  {appointment.displayType}
                 </ThemedText>
             </View>
-            <Pressable
-                style={({ pressed }) => [
-                    styles.shareBtn,
-                    { borderColor: colors.border, backgroundColor: colors.surface },
-                    pressed && { opacity: 0.7 },
-                ]}
-                onPress={onShare}
-            >
-                <Feather name="share-2" size={14} color={colors.textMuted} />
-            </Pressable>
-            <SmartJoinButton
-                scheduledTime={appointment.scheduled_time}
-                durationMinutes={appointment.duration_minutes || 30}
-                appointmentStatus={appointment.status}
-                role="doctor"
-                size="sm"
-                onPress={onJoin}
-            />
+            {!isInPerson && (
+                <Pressable
+                    style={({ pressed }) => [
+                        styles.shareBtn,
+                        { borderColor: colors.border, backgroundColor: colors.surface },
+                        pressed && { opacity: 0.7 },
+                    ]}
+                    onPress={onShare}
+                >
+                    <Feather name="share-2" size={14} color={colors.textMuted} />
+                </Pressable>
+            )}
+            {renderAction()}
         </Pressable>
     );
 }
@@ -237,10 +292,14 @@ export default function DoctorHomeScreen() {
     const { colors } = useTheme();
     const [selectedPatient, setSelectedPatient] = useState<PatientProfile | null>(null);
     const [isChartOpen, setIsChartOpen] = useState(false);
+    const [isTypeSheetOpen, setIsTypeSheetOpen] = useState(false);
     const [isRxOpen, setIsRxOpen] = useState(false);
+    /** Patient bound to the Rx modal — separate from chart selectedPatient */
+    const [rxPatient, setRxPatient] = useState<PatientProfile | null>(null);
     const [isAvailabilityOpen, setIsAvailabilityOpen] = useState(false);
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
+    const [refreshChartCallback, setRefreshChartCallback] = useState<(() => void) | null>(null);
 
     // Real data from API
     const [doctorProfile, setDoctorProfile] = useState<DoctorProfile | null>(null);
@@ -323,6 +382,17 @@ export default function DoctorHomeScreen() {
         const found = patients.find((p) => p.id === appt.patient_id);
         if (found) openChart(found);
     };
+
+    // Stable reference — must not be recreated on every render or it triggers an
+    // infinite loop in PatientChartModal's useEffect that depends on this prop.
+    const handleRefreshRecords = useCallback((callback: () => void) => {
+        setRefreshChartCallback(() => callback);
+    }, []);
+
+    const handleRefreshChart = useCallback((refreshFn: () => void) => {
+        setRefreshChartCallback(() => refreshFn);
+    }, []);
+
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
             <ScrollView
@@ -377,7 +447,7 @@ export default function DoctorHomeScreen() {
                                     action={action}
                                     onPress={
                                         action.label === 'New Prescription'
-                                            ? () => setIsRxOpen(true)
+                                            ? () => setIsTypeSheetOpen(true)
                                             : action.label === 'Availability'
                                                 ? () => setIsAvailabilityOpen(true)
                                                 : action.label === 'History'
@@ -472,18 +542,38 @@ export default function DoctorHomeScreen() {
                 patient={selectedPatient}
                 onClose={() => setIsChartOpen(false)}
                 onNewPrescription={() => {
+                    setRxPatient(selectedPatient);
                     setIsChartOpen(false);
+                    setIsRxOpen(true);
+                }}
+                onRefreshRecords={handleRefreshRecords}
+            />
+            <PrescriptionTypeSheet
+                visible={isTypeSheetOpen}
+                onClose={() => setIsTypeSheetOpen(false)}
+                onIndependentPrescription={() => {
+                    setRxPatient(null);
+                    setIsTypeSheetOpen(false);
+                    setIsRxOpen(true);
+                }}
+                onPatientPrescription={(patient) => {
+                    setRxPatient(patient);
+                    setIsTypeSheetOpen(false);
                     setIsRxOpen(true);
                 }}
             />
             <NewPrescriptionModal
                 visible={isRxOpen}
-                onClose={() => setIsRxOpen(false)}
-                patientId={selectedPatient?.id}
-                patientName={selectedPatient?.full_name ?? ''}
-                patientAge={selectedPatient?.date_of_birth ?? ''}
-                patientGender={selectedPatient?.gender ?? ''}
+                onClose={() => {
+                    setIsRxOpen(false);
+                    setRxPatient(null);
+                }}
+                patientId={rxPatient?.id}
+                patientName={rxPatient?.full_name ?? ''}
+                patientAge={dobToAge(rxPatient?.date_of_birth)}
+                patientGender={rxPatient?.gender ?? ''}
                 onPrescriptionCreated={fetchAll}
+                onRefreshChart={handleRefreshChart}
             />
             <AvailabilityModal
                 visible={isAvailabilityOpen}
@@ -662,6 +752,24 @@ const styles = StyleSheet.create({
         height: 34,
         alignItems: 'center',
         justifyContent: 'center',
+        borderRadius: radii.sm,
+        borderWidth: 1,
+    },
+    viewPatientBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+        paddingVertical: 6,
+        paddingHorizontal: spacing.sm,
+        borderRadius: radii.sm,
+        borderWidth: 1,
+    },
+    processingBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+        paddingVertical: 6,
+        paddingHorizontal: spacing.sm,
         borderRadius: radii.sm,
         borderWidth: 1,
     },

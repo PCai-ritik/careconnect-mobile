@@ -9,15 +9,13 @@
 import {
     View,
     Text,
-    Modal,
     Pressable,
     ScrollView,
     StyleSheet,
     Dimensions,
-    Animated,
 } from 'react-native';
+import { ThemedBottomSheet } from '@/components/shared/ThemedBottomSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import useSwipeDown from '@/hooks/useSwipeDown';
 import { Feather } from '@expo/vector-icons';
 import {
     spacing,
@@ -103,27 +101,10 @@ const recentActivity: ActivityItem[] = [
 export default function ActivityHistoryModal({ visible, onClose }: ActivityHistoryModalProps) {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
-    const { panHandlers, animatedStyle } = useSwipeDown(onClose);
 
     return (
-        <Modal
-            animationType="slide"
-            transparent
-            visible={visible}
-            onRequestClose={onClose}
-        >
-            {/* Backdrop */}
-            <Pressable style={s.backdrop} onPress={onClose} />
-
-            {/* Sheet */}
-            <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom, backgroundColor: colors.surface }]}>
-                {/* Handle */}
-                <View style={s.handleRow} {...panHandlers}>
-                    <View style={[s.handle, { backgroundColor: colors.border }]} />
-                </View>
-
-                {/* Header */}
-                <View style={s.header}>
+        <ThemedBottomSheet visible={visible} onClose={onClose}>
+            <View style={s.header}>
                     <View>
                         <ThemedText color="primary" weight="bold" size="xl" style={s.headerTitle}>Recent Activity</ThemedText>
                         <ThemedText color="muted" size="xs" style={s.headerSubtitle}>
@@ -166,37 +147,13 @@ export default function ActivityHistoryModal({ visible, onClose }: ActivityHisto
                         </View>
                     ))}
                 </ScrollView>
-            </Animated.View>
-        </Modal>
+        </ThemedBottomSheet>
     );
 }
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-    // Shell
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-    sheet: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: SCREEN_HEIGHT * 0.90,
-        borderTopLeftRadius: radii.xl,
-        borderTopRightRadius: radii.xl,
-        ...shadows.elevated,
-    },
-    handleRow: {
-        alignItems: 'center',
-        paddingTop: spacing.md,
-        paddingBottom: spacing.xs,
-    },
-    handle: {
-        width: 40,
-        height: 4,
-        borderRadius: 2,
-    },
-
     // Header
     header: {
         flexDirection: 'row',

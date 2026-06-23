@@ -9,7 +9,7 @@
  * Mirrors the web dashboard's lib/dashboard.ts for full concurrency.
  */
 
-import { apiRequest } from './api';
+import { apiRequest, API_BASE_URL, ApiError } from './api';
 import type {
     DoctorProfile,
     DoctorAvailabilitySlot,
@@ -31,6 +31,14 @@ export async function getDoctorProfile(token: string): Promise<DoctorProfile> {
     });
 }
 
+export async function getDoctorById(doctorId: string, token: string): Promise<DoctorProfile> {
+    return apiRequest<DoctorProfile>({
+        method: 'GET',
+        path: `/doctors/${doctorId}`,
+        token,
+    });
+}
+
 export async function submitDoctorOnboarding(
     token: string,
     data: {
@@ -42,7 +50,10 @@ export async function submitDoctorOnboarding(
         bio?: string;
         phone_number?: string;
         consultation_duration_minutes?: number;
-        consultation_fee?: number;
+        video_consultation_fee?: number;
+        in_person_consultation_fee?: number;
+        clinic_name?: string;
+        clinic_address?: string;
         currency?: string;
         accepted_payment_methods?: string[];
     },
@@ -76,7 +87,10 @@ export async function updateDoctorProfile(
         license_number?: string;
         hospital_affiliation?: string;
         bio?: string;
-        consultation_fee?: number;
+        video_consultation_fee?: number;
+        in_person_consultation_fee?: number;
+        clinic_name?: string;
+        clinic_address?: string;
         currency?: string;
     },
 ): Promise<DoctorProfile> {
@@ -197,6 +211,17 @@ export async function getJoinToken(
     });
 }
 
+export async function endVideoSession(
+    token: string,
+    appointmentId: string,
+): Promise<void> {
+    return apiRequest<void>({
+        method: 'POST',
+        path: `/appointments/${appointmentId}/end-session`,
+        token,
+    });
+}
+
 // ─── Appointment Creation (Follow-Up) ───────────────────────────────────────
 
 export async function createAppointment(
@@ -245,6 +270,52 @@ export async function getMe(
         path: '/api/me',
         token,
     });
+}
+
+// ─── License Verification ────────────────────────────────────────────────────
+
+export interface LicenseVerificationResult {
+    is_valid: boolean;
+    license_number: string;
+    license_state: string;
+}
+
+/**
+ * Uploads a medical license image/PDF to the AI Vision endpoint.
+ * Uses a raw fetch with multipart/form-data because apiRequest is JSON-only.
+ *
+ * Backend contract: POST /doctors/verify-license
+ * Requires: Bearer token (onboarding token is valid)
+ * Returns: { is_valid, license_number, license_state }
+ */
+export async function verifyMedicalLicense(
+    token: string,
+    fileUri: string,
+    fileName: string,
+    mimeType: string,
+): Promise<LicenseVerificationResult> {
+    const formData = new FormData();
+    formData.append('file', {
+        uri: fileUri,
+        name: fileName,
+        type: mimeType,
+    } as unknown as Blob);
+
+    const res = await fetch(`${API_BASE_URL}/doctors/verify-license`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+    });
+
+    if (!res.ok) {
+        const error = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new ApiError(
+            error.detail || error.message || `License verification failed (${res.status})`,
+            res.status,
+        );
+    }
+
+    return res.json() as Promise<LicenseVerificationResult>;
 }
 
 // ─── Doctor Notes ───────────────────────────────────────────────────────────

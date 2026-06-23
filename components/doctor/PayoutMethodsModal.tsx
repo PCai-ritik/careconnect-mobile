@@ -3,33 +3,22 @@
  *
  * 85%-height Bottom Sheet showing saved bank accounts, payment history,
  * accepted payment methods toggles, and Add New Account button.
- * Uses doctorColors + StyleSheet.create().
+ * Fully multi-tenant via useTheme().
  */
 
 import { useState } from 'react';
 import {
     View,
     Text,
-    Modal,
     Pressable,
     ScrollView,
     StyleSheet,
-    Dimensions,
-    Animated,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import useSwipeDown from '@/hooks/useSwipeDown';
+import { ThemedBottomSheet } from '@/components/shared/ThemedBottomSheet';
 import { Feather } from '@expo/vector-icons';
-import {
-    spacing,
-    doctorColors,
-    typography,
-    shadows,
-    radii,
-} from '@/constants/theme';
+import { spacing, shadows, radii, typography } from '@/constants/theme';
+import { useTheme } from '@/providers/ThemeProvider';
 import AddBankAccountModal from '@/components/doctor/AddBankAccountModal';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface PayoutMethodsModalProps {
     visible: boolean;
@@ -69,8 +58,7 @@ const PAYMENT_METHODS = [
 ];
 
 export default function PayoutMethodsModal({ visible, onClose }: PayoutMethodsModalProps) {
-    const insets = useSafeAreaInsets();
-    const { panHandlers, animatedStyle } = useSwipeDown(onClose);
+    const { colors } = useTheme();
     const [isAddBankOpen, setIsAddBankOpen] = useState(false);
     const [acceptedMethods, setAcceptedMethods] = useState<string[]>(['upi', 'card']);
 
@@ -82,140 +70,136 @@ export default function PayoutMethodsModal({ visible, onClose }: PayoutMethodsMo
 
     return (
         <>
-            <Modal
-                animationType="slide"
-                transparent
-                visible={visible}
-                onRequestClose={onClose}
-            >
-                <Pressable style={s.backdrop} onPress={onClose} />
+            <ThemedBottomSheet visible={visible} onClose={onClose}>
+                {/* Header */}
+                <View style={s.header}>
+                    <Text style={[s.headerTitle, { color: colors.textPrimary }]}>Payout Methods</Text>
+                </View>
 
-                <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom }]}>
-                    <View style={s.handleRow} {...panHandlers}>
-                        <View style={s.handle} />
-                    </View>
+                <ScrollView
+                    style={s.scrollArea}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={s.scrollInner}
+                >
+                    <Text style={[s.sectionTitle, { color: colors.textMuted }]}>Saved Accounts</Text>
 
-                    {/* Header */}
-                    <View style={s.header}>
-                        <Text style={s.headerTitle}>Payout Methods</Text>
-                    </View>
+                    {savedAccounts.map((account) => (
+                        <View key={account.id} style={[s.accountCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
+                            <View style={s.accountRow}>
+                                <View style={[s.accountIcon, { backgroundColor: colors.surfaceMuted }]}>
+                                    <Feather name={account.icon} size={20} color={colors.primary} />
+                                </View>
+                                <View style={s.accountInfo}>
+                                    <Text style={[s.accountBank, { color: colors.textPrimary }]}>{account.bank}</Text>
+                                    <Text style={[s.accountMeta, { color: colors.textMuted }]}>
+                                        {account.type}  •  •••• {account.last4}
+                                    </Text>
+                                </View>
+                            </View>
+                            <Pressable
+                                style={({ pressed }) => [pressed && { opacity: 0.5 }]}
+                                hitSlop={8}
+                            >
+                                <Text style={[s.removeText, { color: colors.error }]}>Remove</Text>
+                            </Pressable>
+                        </View>
+                    ))}
 
-                    <ScrollView
-                        style={s.scrollArea}
-                        showsVerticalScrollIndicator={false}
-                        contentContainerStyle={s.scrollInner}
-                    >
-                        <Text style={s.sectionTitle}>Saved Accounts</Text>
-
-                        {savedAccounts.map((account) => (
-                            <View key={account.id} style={s.accountCard}>
-                                <View style={s.accountRow}>
-                                    <View style={s.accountIcon}>
+                    {/* Accepted Payment Methods */}
+                    <Text style={[s.sectionTitle, { color: colors.textMuted, marginTop: spacing['3xl'] }]}>
+                        Accepted Payment Methods
+                    </Text>
+                    <View style={s.methodGrid}>
+                        {PAYMENT_METHODS.map((method) => {
+                            const active = acceptedMethods.includes(method.id);
+                            return (
+                                <Pressable
+                                    key={method.id}
+                                    style={[
+                                        s.methodCard,
+                                        { borderColor: colors.borderLight, backgroundColor: colors.surface },
+                                        active && { borderColor: colors.primary, backgroundColor: colors.primary + '08' },
+                                    ]}
+                                    onPress={() => toggleMethod(method.id)}
+                                >
+                                    <View style={[
+                                        s.methodIcon,
+                                        { backgroundColor: colors.surfaceMuted },
+                                        active && { backgroundColor: colors.primary },
+                                    ]}>
                                         <Feather
-                                            name={account.icon}
+                                            name={method.icon}
                                             size={20}
-                                            color={doctorColors.primary}
+                                            color={active ? colors.surface : colors.textSecondary}
                                         />
                                     </View>
-                                    <View style={s.accountInfo}>
-                                        <Text style={s.accountBank}>{account.bank}</Text>
-                                        <Text style={s.accountMeta}>
-                                            {account.type}  •  •••• {account.last4}
-                                        </Text>
-                                    </View>
-                                </View>
-                                <Pressable
-                                    style={({ pressed }) => [pressed && { opacity: 0.5 }]}
-                                    hitSlop={8}
-                                >
-                                    <Text style={s.removeText}>Remove</Text>
+                                    <Text style={[
+                                        s.methodLabel,
+                                        { color: colors.textSecondary },
+                                        active && { color: colors.primary, fontFamily: typography.fontFamily.semiBold },
+                                    ]}>
+                                        {method.label}
+                                    </Text>
+                                    {active && (
+                                        <View style={[s.methodCheck, { backgroundColor: colors.primary + '18' }]}>
+                                            <Feather name="check" size={14} color={colors.primary} />
+                                        </View>
+                                    )}
                                 </Pressable>
+                            );
+                        })}
+                    </View>
+
+                    {/* Payment History */}
+                    <Text style={[s.sectionTitle, { color: colors.textMuted, marginTop: spacing['3xl'] }]}>Payment History</Text>
+
+                    <View style={[s.historyCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
+                        {paymentHistory.map((payout, idx) => (
+                            <View
+                                key={payout.id}
+                                style={[
+                                    s.historyRow,
+                                    idx < paymentHistory.length - 1 && [s.historyRowBorder, { borderBottomColor: colors.borderLight }],
+                                ]}
+                            >
+                                <View style={[s.historyIcon, { backgroundColor: colors.surfaceMuted }]}>
+                                    <Feather
+                                        name={payout.status === 'Completed' ? 'check-circle' : 'clock'}
+                                        size={16}
+                                        color={payout.status === 'Completed' ? colors.success : colors.warning}
+                                    />
+                                </View>
+                                <View style={s.historyInfo}>
+                                    <Text style={[s.historyDesc, { color: colors.textPrimary }]}>{payout.desc}</Text>
+                                    <Text style={[s.historyDate, { color: colors.textMuted }]}>{payout.date}</Text>
+                                </View>
+                                <View style={s.historyRight}>
+                                    <Text style={[s.historyAmount, { color: colors.textPrimary }]}>{payout.amount}</Text>
+                                    <Text style={[
+                                        s.historyStatus,
+                                        { color: payout.status === 'Completed' ? colors.success : colors.warning },
+                                    ]}>{payout.status}</Text>
+                                </View>
                             </View>
                         ))}
-
-                        {/* Accepted Payment Methods */}
-                        <Text style={[s.sectionTitle, { marginTop: spacing['3xl'] }]}>
-                            Accepted Payment Methods
-                        </Text>
-                        <View style={s.methodGrid}>
-                            {PAYMENT_METHODS.map((method) => {
-                                const active = acceptedMethods.includes(method.id);
-                                return (
-                                    <Pressable
-                                        key={method.id}
-                                        style={[s.methodCard, active && s.methodCardActive]}
-                                        onPress={() => toggleMethod(method.id)}
-                                    >
-                                        <View style={[s.methodIcon, active && s.methodIconActive]}>
-                                            <Feather
-                                                name={method.icon}
-                                                size={20}
-                                                color={active ? '#FFFFFF' : doctorColors.textSecondary}
-                                            />
-                                        </View>
-                                        <Text style={[s.methodLabel, active && s.methodLabelActive]}>
-                                            {method.label}
-                                        </Text>
-                                        {active && (
-                                            <View style={s.methodCheck}>
-                                                <Feather name="check" size={14} color={doctorColors.primary} />
-                                            </View>
-                                        )}
-                                    </Pressable>
-                                );
-                            })}
-                        </View>
-
-                        {/* Payment History */}
-                        <Text style={[s.sectionTitle, { marginTop: spacing['3xl'] }]}>Payment History</Text>
-
-                        <View style={s.historyCard}>
-                            {paymentHistory.map((payout, idx) => (
-                                <View
-                                    key={payout.id}
-                                    style={[
-                                        s.historyRow,
-                                        idx < paymentHistory.length - 1 && s.historyRowBorder,
-                                    ]}
-                                >
-                                    <View style={s.historyIcon}>
-                                        <Feather
-                                            name={payout.status === 'Completed' ? 'check-circle' : 'clock'}
-                                            size={16}
-                                            color={payout.status === 'Completed' ? '#22C55E' : '#F59E0B'}
-                                        />
-                                    </View>
-                                    <View style={s.historyInfo}>
-                                        <Text style={s.historyDesc}>{payout.desc}</Text>
-                                        <Text style={s.historyDate}>{payout.date}</Text>
-                                    </View>
-                                    <View style={s.historyRight}>
-                                        <Text style={s.historyAmount}>{payout.amount}</Text>
-                                        <Text style={[
-                                            s.historyStatus,
-                                            { color: payout.status === 'Completed' ? '#22C55E' : '#F59E0B' },
-                                        ]}>{payout.status}</Text>
-                                    </View>
-                                </View>
-                            ))}
-                        </View>
-                    </ScrollView>
-
-                    {/* Footer */}
-                    <View style={s.footer}>
-                        <Pressable
-                            style={({ pressed }) => [
-                                s.addBtn,
-                                pressed && { backgroundColor: doctorColors.primaryDark },
-                            ]}
-                            onPress={() => setIsAddBankOpen(true)}
-                        >
-                            <Feather name="plus" size={18} color="#fff" />
-                            <Text style={s.addBtnText}>Add New Bank Account</Text>
-                        </Pressable>
                     </View>
-                </Animated.View>
-            </Modal>
+                </ScrollView>
+
+                {/* Footer */}
+                <View style={[s.footer, { borderTopColor: colors.borderLight }]}>
+                    <Pressable
+                        style={({ pressed }) => [
+                            s.addBtn,
+                            { backgroundColor: colors.primary },
+                            pressed && { backgroundColor: colors.primaryDark },
+                        ]}
+                        onPress={() => setIsAddBankOpen(true)}
+                    >
+                        <Feather name="plus" size={18} color={colors.surface} />
+                        <Text style={[s.addBtnText, { color: colors.surface }]}>Add New Bank Account</Text>
+                    </Pressable>
+                </View>
+            </ThemedBottomSheet>
 
             <AddBankAccountModal
                 visible={isAddBankOpen}
@@ -226,20 +210,6 @@ export default function PayoutMethodsModal({ visible, onClose }: PayoutMethodsMo
 }
 
 const s = StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-    sheet: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: SCREEN_HEIGHT * 0.85,
-        backgroundColor: doctorColors.surface,
-        borderTopLeftRadius: radii.xl,
-        borderTopRightRadius: radii.xl,
-        ...shadows.elevated,
-    },
-    handleRow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
-    handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: doctorColors.border },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -250,7 +220,6 @@ const s = StyleSheet.create({
     headerTitle: {
         fontFamily: typography.fontFamily.bold,
         ...typography.size.xl,
-        color: doctorColors.textPrimary,
     },
 
     scrollArea: { flex: 1 },
@@ -258,15 +227,13 @@ const s = StyleSheet.create({
     sectionTitle: {
         fontFamily: typography.fontFamily.semiBold,
         ...typography.size.sm,
-        color: doctorColors.textMuted,
         textTransform: 'uppercase',
         letterSpacing: 1,
         marginBottom: spacing.lg,
     },
+
     accountCard: {
-        backgroundColor: doctorColors.surface,
         borderWidth: 1,
-        borderColor: doctorColors.borderLight,
         borderRadius: radii.lg,
         padding: spacing.lg,
         marginBottom: spacing.md,
@@ -282,7 +249,6 @@ const s = StyleSheet.create({
         width: 42,
         height: 42,
         borderRadius: 21,
-        backgroundColor: doctorColors.surfaceMuted,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -290,21 +256,17 @@ const s = StyleSheet.create({
     accountBank: {
         fontFamily: typography.fontFamily.semiBold,
         ...typography.size.base,
-        color: doctorColors.textPrimary,
     },
     accountMeta: {
         fontFamily: typography.fontFamily.regular,
         ...typography.size.xs,
-        color: doctorColors.textMuted,
     },
     removeText: {
         fontFamily: typography.fontFamily.medium,
         ...typography.size.sm,
-        color: '#EF4444',
         alignSelf: 'flex-end',
     },
 
-    // Payment method toggles
     methodGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -317,40 +279,24 @@ const s = StyleSheet.create({
         gap: spacing.md,
         padding: spacing.md,
         borderWidth: 1.5,
-        borderColor: doctorColors.borderLight,
         borderRadius: radii.lg,
-        backgroundColor: doctorColors.surface,
-    },
-    methodCardActive: {
-        borderColor: doctorColors.primary,
-        backgroundColor: doctorColors.primary + '08',
     },
     methodIcon: {
         width: 38,
         height: 38,
         borderRadius: radii.md,
-        backgroundColor: doctorColors.surfaceMuted,
         alignItems: 'center',
         justifyContent: 'center',
-    },
-    methodIconActive: {
-        backgroundColor: doctorColors.primary,
     },
     methodLabel: {
         flex: 1,
         fontFamily: typography.fontFamily.medium,
         ...typography.size.sm,
-        color: doctorColors.textSecondary,
-    },
-    methodLabelActive: {
-        color: doctorColors.primary,
-        fontFamily: typography.fontFamily.semiBold,
     },
     methodCheck: {
         width: 22,
         height: 22,
         borderRadius: 11,
-        backgroundColor: doctorColors.primary + '18',
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -359,7 +305,6 @@ const s = StyleSheet.create({
         paddingHorizontal: spacing.xl,
         paddingVertical: spacing.lg,
         borderTopWidth: 1,
-        borderTopColor: doctorColors.borderLight,
     },
     addBtn: {
         flexDirection: 'row',
@@ -368,19 +313,14 @@ const s = StyleSheet.create({
         gap: spacing.sm,
         paddingVertical: spacing.lg,
         borderRadius: radii.md,
-        backgroundColor: doctorColors.primary,
     },
     addBtnText: {
         fontFamily: typography.fontFamily.semiBold,
         ...typography.size.base,
-        color: '#FFFFFF',
     },
 
-    // Payment History
     historyCard: {
-        backgroundColor: doctorColors.surface,
         borderWidth: 1,
-        borderColor: doctorColors.borderLight,
         borderRadius: radii.lg,
         overflow: 'hidden',
         ...shadows.card,
@@ -394,13 +334,11 @@ const s = StyleSheet.create({
     },
     historyRowBorder: {
         borderBottomWidth: 1,
-        borderBottomColor: doctorColors.borderLight,
     },
     historyIcon: {
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: doctorColors.surfaceMuted,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -411,12 +349,10 @@ const s = StyleSheet.create({
     historyDesc: {
         fontFamily: typography.fontFamily.medium,
         ...typography.size.sm,
-        color: doctorColors.textPrimary,
     },
     historyDate: {
         fontFamily: typography.fontFamily.regular,
         ...typography.size.xs,
-        color: doctorColors.textMuted,
     },
     historyRight: {
         alignItems: 'flex-end',
@@ -425,7 +361,6 @@ const s = StyleSheet.create({
     historyAmount: {
         fontFamily: typography.fontFamily.semiBold,
         ...typography.size.sm,
-        color: doctorColors.textPrimary,
     },
     historyStatus: {
         fontFamily: typography.fontFamily.medium,

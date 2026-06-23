@@ -19,7 +19,11 @@ import {
     StyleSheet,
     Dimensions,
     Animated,
+    Alert,
+    ActivityIndicator,
 } from 'react-native';
+
+import { ThemedBottomSheet } from '@/components/shared/ThemedBottomSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import {
@@ -29,8 +33,16 @@ import {
     radii,
     shadows,
 } from '@/constants/theme';
-import type { MedicalRecord } from '@/services/types';
-import useSwipeDown from '@/hooks/useSwipeDown';
+import type { MedicalRecord, PatientProfile } from '@/services/types';
+import { useState } from 'react';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
+import { generatePrescriptionHTML } from '@/services/prescription-template';
+import { useAuth } from '@/hooks/useAuth';
+import { getDoctorById } from '@/services/doctor';
+import { getHospitalBranding } from '@/services/caregiver';
+import { API_BASE_URL } from '@/services/api';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.75;
@@ -39,35 +51,108 @@ interface Props {
     visible: boolean;
     record: MedicalRecord | null;
     onClose: () => void;
+    patient?: PatientProfile | null;
 }
 
 function getInitials(name: string): string {
     return name.split(' ').map((n) => n[0]).join('');
 }
 
-export default function MedicalRecordSheet({ visible, record, onClose }: Props) {
+async function generateAndDownloadPDF(
+    record: MedicalRecord,
+    token: string,
+    patient?: PatientProfile | null,
+    hospitalId?: string,
+): Promise<void> {
+    try {
+        const [doctorProfile, branding] = await Promise.all([
+            getDoctorById(record.doctor_id, token),
+            hospitalId ? getHospitalBranding(hospitalId).catch(() => null) : Promise.resolve(null),
+        ]);
+
+        const logoUrl = branding?.logo_url
+            ? branding.logo_url.startsWith('http')
+                ? branding.logo_url
+                : `${API_BASE_URL}${branding.logo_url}`
+            : undefined;
+
+        const html = generatePrescriptionHTML({
+            record,
+            doctor: {
+                name: doctorProfile?.full_name || 'Doctor',
+                specialization: doctorProfile?.specialization || 'Medical Professional',
+                license: doctorProfile?.license_number || '',
+                phone: doctorProfile?.phone_number ?? undefined,
+                clinicName: doctorProfile?.clinic_name ?? undefined,
+                clinicAddress: doctorProfile?.clinic_address ?? undefined,
+            },
+            hospital: {
+                name: branding?.name || 'CareConnect',
+                primaryColor: branding?.brand_color || '#1a3a52',
+                secondaryColor: '#7bc041',
+                headingFont: 'Segoe UI, sans-serif',
+                bodyFont: 'Segoe UI, sans-serif',
+                logoUrl,
+            },
+            patient,
+        });
+        console.log('📄 PDF Gen: HTML generated, converting to PDF...');
+
+        const pdf = await Print.printToFileAsync({ html, base64: false });
+
+        // Build a human-readable filename: prescription-<patient>-<short-id>.pdf
+        const patientSlug = (patient?.full_name || 'patient')
+            .toLowerCase()
+            .replace(/\s+/g, '-')
+            .replace(/[^a-z0-9-]/g, '');
+        const shortId = record.id.replace(/-/g, '').slice(0, 6);
+        const filename = `prescription-${patientSlug}-${shortId}.pdf`;
+
+        const srcFile = new File(pdf.uri);
+        const destFile = new File(Paths.cache, filename);
+        if (destFile.exists) destFile.delete();
+        srcFile.copy(destFile);
+
+        if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(destFile.uri, {
+                mimeType: 'application/pdf',
+                dialogTitle: `Prescription - ${record.diagnosis}`,
+                UTI: 'com.adobe.pdf',
+            });
+        } else {
+            Alert.alert('Success', `PDF saved as ${filename}`);
+        }
+    } catch (error) {
+        console.error('📄 PDF Gen: Error -', error);
+        console.error('Error generating PDF:', error);
+        Alert.alert('Error', 'Failed to generate prescription PDF.');
+    }
+}
+
+export default function MedicalRecordSheet({ visible, record, onClose, patient }: Props) {
     const insets = useSafeAreaInsets();
-    const { panHandlers, animatedStyle } = useSwipeDown(onClose);
+    const [isDownloading, setIsDownloading] = useState(false);
+    const { token, user } = useAuth();
+
+    const handleDownload = async () => {
+        if (!record || isDownloading || !token) return;
+        setIsDownloading(true);
+        try {
+            await generateAndDownloadPDF(record, token, patient, user?.hospitalId);
+        } finally {
+            setIsDownloading(false);
+        }
+    };
 
     return (
-        <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
-            {/* Backdrop */}
-            <Pressable style={styles.backdrop} onPress={onClose}>
-                <View />
-            </Pressable>
-
-            {/* Sheet */}
-            <Animated.View style={[styles.sheet, animatedStyle, { paddingBottom: insets.bottom }]}>
-                <View style={styles.handleRow} {...panHandlers}>
-                    <View style={styles.handleBar} />
-                </View>
-
-                {record && (
+        <ThemedBottomSheet visible={visible} onClose={onClose}>
+            {record && (
                     <>
 
                         <ScrollView
                             contentContainerStyle={styles.scrollContent}
                             showsVerticalScrollIndicator={false}
+                            bounces={true}
                         >
                             {/* Doctor info */}
                             <View style={styles.doctorRow}>
@@ -149,39 +234,39 @@ export default function MedicalRecordSheet({ visible, record, onClose }: Props) 
 
                             {/* Download */}
                             <Pressable
-                                style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.8 }]}
-                                onPress={() => console.log('Downloading record:', record.id)}
+                                style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.8 }, isDownloading && { opacity: 0.6 }]}
+                                onPress={handleDownload}
+                                disabled={isDownloading}
                             >
-                                <Feather name="download" size={18} color={patientColors.primary} />
-                                <Text style={styles.downloadText}>Download PDF</Text>
+                                {isDownloading ? (
+                                    <>
+                                        <ActivityIndicator size="small" color={patientColors.primary} />
+                                        <Text style={styles.downloadText}>Generating...</Text>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Feather name="download" size={18} color={patientColors.primary} />
+                                        <Text style={styles.downloadText}>Download PDF</Text>
+                                    </>
+                                )}
                             </Pressable>
 
                             <View style={{ height: spacing['3xl'] }} />
                         </ScrollView>
                     </>
-                )}
-            </Animated.View>
-        </Modal>
+            )}
+            
+        </ThemedBottomSheet>
     );
 }
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
-    sheet: {
-        position: 'absolute', bottom: 0, left: 0, right: 0,
-        height: SHEET_HEIGHT, backgroundColor: patientColors.surface,
-        borderTopLeftRadius: 24, borderTopRightRadius: 24,
-        ...shadows.elevated,
-    },
-    handleBar: {
-        width: 40, height: 4, borderRadius: 2,
-        backgroundColor: patientColors.border, alignSelf: 'center',
-    },
-    handleRow: {
-        alignItems: 'center', paddingVertical: spacing.sm,
-    },
+    
+    
+    
+    
 
     // Header
     header: {

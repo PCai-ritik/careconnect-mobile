@@ -6,7 +6,7 @@
  * Wired to POST /medical-records with structured vitals.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
     View,
     Text,
@@ -21,8 +21,12 @@ import {
     Alert,
     Linking,
 } from 'react-native';
+import { WebView } from 'react-native-webview';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
+import { ThemedBottomSheet } from '@/components/shared/ThemedBottomSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import useSwipeDown from '@/hooks/useSwipeDown';
 import { Feather } from '@expo/vector-icons';
 import {
     spacing,
@@ -30,7 +34,10 @@ import {
     radii,
     typography,
     doctorColors,
+    getBranding,
 } from '@/constants/theme';
+import { generatePrescriptionHTML } from '@/services/prescription-template';
+import { API_BASE_URL } from '@/services/api';
 import { useTheme } from '@/providers/ThemeProvider';
 import { ThemedText, ThemedView } from '@/components/shared/Themed';
 import { useAuth } from '@/hooks/useAuth';
@@ -67,6 +74,7 @@ interface NewPrescriptionModalProps {
     patientAge?: string;
     patientGender?: string;
     onPrescriptionCreated?: () => void;
+    onRefreshChart?: (callback: () => void) => void;
 }
 
 type TabId = 'edit' | 'preview';
@@ -378,160 +386,92 @@ function EditFormTab({
     );
 }
 
-// ─── Preview Tab (Rx Paper Pad) ─────────────────────────────────────────────
+// ─── Preview Tab — renders the same HTML template as the web dashboard ───────
 
 function PreviewTab({
     formData,
     vitals,
     medications,
     doctorProfile,
+    logoDataUrl,
 }: {
     formData: Record<string, string>;
     vitals: Vitals;
     medications: Medication[];
     doctorProfile: DoctorProfile | null;
+    logoDataUrl: string | null;
 }) {
-    const { colors } = useTheme();
-    const filledMeds = medications.filter((m) => m.name.trim());
-    const currentDate = formatDate();
-    const doctorName = doctorProfile?.full_name ?? 'Doctor';
-    const doctorSpec = doctorProfile?.specialization ?? '';
-    const doctorLicense = doctorProfile?.license_number ?? '';
-    const doctorPhone = doctorProfile?.phone_number ?? '';
-    const doctorLabel = [doctorSpec, doctorLicense ? `Reg No: ${doctorLicense}` : ''].filter(Boolean).join(' • ');
+    const branding = getBranding();
 
-    const hasVitals = vitals.bp || vitals.pulse || vitals.temp || vitals.weight;
-    const vitalsStr = [
-        vitals.bp && `BP: ${vitals.bp}`,
-        vitals.pulse && `Pulse: ${vitals.pulse}`,
-        vitals.temp && `Temp: ${vitals.temp}`,
-        vitals.weight && `Weight: ${vitals.weight}`,
-    ].filter(Boolean).join(', ');
+    const html = useMemo(() => {
+        // ThemeProvider already normalises the URL — use it directly, same as the home header
+        const logoUrl = branding.logoUrl ?? undefined;
+
+        // Build a preview-only record object — never persisted, only rendered to HTML.
+        // Cast to the expected type since we don't have DB-generated fields (id, etc.) yet.
+        const previewRecord = {
+            id: '',
+            patient_id: '',
+            doctor_id: '',
+            appointment_id: null,
+            created_at: new Date().toISOString(),
+            diagnosis: formData.diagnosis,
+            symptoms: formData.chiefComplaints || null,
+            treatment: formData.advice || null,
+            follow_up_date: formData.followUpDate || null,
+            vitals: (vitals.bp || vitals.pulse || vitals.temp || vitals.weight)
+                ? vitals as unknown as Record<string, string>
+                : null,
+            prescriptions: medications
+                .filter((m) => m.name.trim())
+                .map((m, i) => ({
+                    id: String(i),
+                    doctor_id: '',
+                    patient_id: '',
+                    medical_record_id: null,
+                    created_at: new Date().toISOString(),
+                    medication_name: m.name,
+                    dosage: m.dosage || null,
+                    frequency: m.frequency || null,
+                    duration: m.duration || null,
+                    notes: m.instructions || null,
+                })),
+        };
+
+        return generatePrescriptionHTML({
+            record: previewRecord as any,
+            doctor: {
+                name: doctorProfile?.full_name || 'Doctor',
+                specialization: doctorProfile?.specialization || 'Medical Professional',
+                license: doctorProfile?.license_number || '',
+                phone: doctorProfile?.phone_number || undefined,
+                clinicName: (doctorProfile as any)?.clinic_name || undefined,
+                clinicAddress: (doctorProfile as any)?.clinic_address || undefined,
+            },
+            hospital: {
+                name: branding.name || 'CareConnect',
+                primaryColor: branding.primaryColor || '#1a3a52',
+                secondaryColor: '#7bc041',
+                headingFont: 'system-ui, sans-serif',
+                bodyFont: 'system-ui, sans-serif',
+                logoUrl: logoDataUrl || undefined,
+            },
+            patient: {
+                full_name: formData.patientName,
+                date_of_birth: null,
+            } as any,
+            patientAgeOverride: formData.patientAge || undefined,
+        });
+    }, [formData, vitals, medications, doctorProfile, branding, logoDataUrl]);
 
     return (
-        <ScrollView
+        <WebView
             style={s.tabScroll}
+            source={{ html }}
+            originWhitelist={['*']}
+            scrollEnabled
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={s.tabScrollInner}
-        >
-            <View style={[s.paper, { backgroundColor: colors.surface }]}>
-                {/* Doctor Header */}
-                <View style={[s.paperHeader, { borderBottomColor: colors.borderLight }]}>
-                    <ThemedText color="primary" weight="bold" size="2xl" style={s.paperDoctorName}>{doctorName}</ThemedText>
-                    <ThemedText color="muted" size="sm" style={s.paperSubtext}>{doctorLabel}</ThemedText>
-                    {doctorPhone ? <ThemedText color="muted" size="sm" style={s.paperSubtext}>Tel: {doctorPhone}</ThemedText> : null}
-                </View>
-
-                {/* Patient Info Bar */}
-                <View style={[s.paperPatientBar, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderLight }]}>
-                    <ThemedText color="primary" size="sm" style={s.paperSmall}>
-                        <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Patient: </ThemedText>
-                        {formData.patientName || '—'}
-                    </ThemedText>
-                    <ThemedText color="primary" size="sm" style={s.paperSmall}>
-                        <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Age: </ThemedText>
-                        {formData.patientAge || '—'}
-                    </ThemedText>
-                    <ThemedText color="primary" size="sm" style={s.paperSmall}>
-                        <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Gender: </ThemedText>
-                        {formData.patientGender || '—'}
-                    </ThemedText>
-                </View>
-
-                {/* Date */}
-                <ThemedText color="primary" size="sm" style={[s.paperSmall, { marginBottom: spacing.lg }]}>
-                    <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Date: </ThemedText>{currentDate}
-                </ThemedText>
-
-                {/* Chief Complaints & Vitals */}
-                {(formData.chiefComplaints || hasVitals) ? (
-                    <View style={{ marginBottom: spacing.lg }}>
-                        {formData.chiefComplaints ? (
-                            <ThemedText color="primary" size="sm" style={s.paperSmall}>
-                                <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>C/C: </ThemedText>
-                                {formData.chiefComplaints}
-                            </ThemedText>
-                        ) : null}
-                        {hasVitals ? (
-                            <ThemedText color="primary" size="sm" style={[s.paperSmall, { marginTop: spacing.xxs }]}>
-                                <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Vitals: </ThemedText>
-                                {vitalsStr}
-                            </ThemedText>
-                        ) : null}
-                    </View>
-                ) : null}
-
-                {/* Diagnosis */}
-                {formData.diagnosis ? (
-                    <ThemedText color="primary" size="sm" style={[s.paperSmall, { marginBottom: spacing.lg }]}>
-                        <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Diagnosis: </ThemedText>
-                        {formData.diagnosis}
-                    </ThemedText>
-                ) : null}
-
-                {/* Rx Symbol */}
-                <Text style={[s.rxSymbol, { color: colors.primaryLight }]}>℞</Text>
-
-                {/* Medications Table */}
-                {filledMeds.length > 0 && (
-                    <View style={[s.medTable, { borderColor: colors.borderLight }]}>
-                        {/* Table header */}
-                        <View style={[s.medTableRow, s.medTableHeaderRow, { backgroundColor: colors.surfaceMuted, borderBottomColor: colors.borderLight }]}>
-                            <ThemedText color="secondary" weight="semiBold" size="xs" style={[s.medTableCell, s.medTableNumCol, s.medTableHeaderText]}>#</ThemedText>
-                            <ThemedText color="secondary" weight="semiBold" size="xs" style={[s.medTableCell, s.medTableNameCol, s.medTableHeaderText]}>Medicine</ThemedText>
-                            <ThemedText color="secondary" weight="semiBold" size="xs" style={[s.medTableCell, s.medTableCol, s.medTableHeaderText]}>Dosage</ThemedText>
-                            <ThemedText color="secondary" weight="semiBold" size="xs" style={[s.medTableCell, s.medTableCol, s.medTableHeaderText]}>Freq.</ThemedText>
-                            <ThemedText color="secondary" weight="semiBold" size="xs" style={[s.medTableCell, s.medTableCol, s.medTableHeaderText]}>Duration</ThemedText>
-                        </View>
-                        {/* Table body */}
-                        {filledMeds.map((med, idx) => (
-                            <View key={med.id} style={[s.medTableRow, { borderBottomColor: colors.borderLight }]}>
-                                <ThemedText color="primary" size="sm" style={[s.medTableCell, s.medTableNumCol]}>{idx + 1}</ThemedText>
-                                <View style={[s.medTableNameCol]}>
-                                    <ThemedText color="primary" size="sm" style={s.medTableCell}>{med.name}</ThemedText>
-                                    {med.instructions ? (
-                                        <ThemedText color="muted" size="xs" style={s.medTableInstructions}>({med.instructions})</ThemedText>
-                                    ) : null}
-                                </View>
-                                <ThemedText color="primary" size="sm" style={[s.medTableCell, s.medTableCol]}>{med.dosage}</ThemedText>
-                                <ThemedText color="primary" size="sm" style={[s.medTableCell, s.medTableCol]}>{med.frequency}</ThemedText>
-                                <ThemedText color="primary" size="sm" style={[s.medTableCell, s.medTableCol]}>{med.duration}</ThemedText>
-                            </View>
-                        ))}
-                    </View>
-                )}
-
-                {/* Advice */}
-                {formData.advice ? (
-                    <ThemedText color="primary" size="sm" style={[s.paperSmall, { marginTop: spacing.lg }]}>
-                        <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Advice: </ThemedText>
-                        {formData.advice}
-                    </ThemedText>
-                ) : null}
-
-                {/* Follow-up */}
-                {formData.followUpDate ? (
-                    <ThemedText color="primary" size="sm" style={[s.paperSmall, { marginTop: spacing.sm }]}>
-                        <ThemedText color="primary" weight="bold" size="sm" style={s.paperBold}>Follow-up: </ThemedText>
-                        {formData.followUpDate}
-                    </ThemedText>
-                ) : null}
-
-                {/* Signature */}
-                <View style={s.signatureBlock}>
-                    <View style={[s.signatureLine, { backgroundColor: colors.borderLight }]} />
-                    <ThemedText color="primary" weight="semiBold" size="sm" style={s.signatureName}>{doctorName}</ThemedText>
-                    <ThemedText color="muted" size="xs" style={s.signatureQual}>{doctorLabel}</ThemedText>
-                </View>
-
-                {/* Disclaimer */}
-                <View style={[s.paperFooter, { borderTopColor: colors.borderLight }]}>
-                    <ThemedText color="muted" size="xs" style={s.paperDisclaimer}>
-                        This prescription is digitally generated. Valid for 30 days from issue date.
-                    </ThemedText>
-                </View>
-            </View>
-        </ScrollView>
+        />
     );
 }
 
@@ -734,6 +674,101 @@ const slotStyles = StyleSheet.create({
     bookText: { fontFamily: typography.fontFamily.semiBold, ...typography.size.sm, color: '#fff' },
 });
 
+// ─── PDF Generation Helper ────────────────────────────────────────────
+
+async function generateAndDownloadPDF(
+    formData: Record<string, string>,
+    vitals: Vitals,
+    medications: Medication[],
+    doctorProfile: DoctorProfile | null,
+    branding: any,
+    logoUrl: string | undefined,
+): Promise<void> {
+    try {
+        const previewRecord = {
+            id: '',
+            patient_id: '',
+            doctor_id: '',
+            appointment_id: null,
+            created_at: new Date().toISOString(),
+            diagnosis: formData.diagnosis,
+            symptoms: formData.chiefComplaints || null,
+            treatment: formData.advice || null,
+            follow_up_date: formData.followUpDate || null,
+            vitals: (vitals.bp || vitals.pulse || vitals.temp || vitals.weight)
+                ? vitals as unknown as Record<string, string>
+                : null,
+            prescriptions: medications
+                .filter((m) => m.name.trim())
+                .map((m, i) => ({
+                    id: String(i),
+                    doctor_id: '',
+                    patient_id: '',
+                    medical_record_id: null,
+                    created_at: new Date().toISOString(),
+                    medication_name: m.name,
+                    dosage: m.dosage || null,
+                    frequency: m.frequency || null,
+                    duration: m.duration || null,
+                    notes: m.instructions || null,
+                })),
+        };
+
+        const html = generatePrescriptionHTML({
+            record: previewRecord as any,
+            doctor: {
+                name: doctorProfile?.full_name || 'Doctor',
+                specialization: doctorProfile?.specialization || 'Medical Professional',
+                license: doctorProfile?.license_number || '',
+                phone: doctorProfile?.phone_number || undefined,
+                clinicName: (doctorProfile as any)?.clinic_name || undefined,
+                clinicAddress: (doctorProfile as any)?.clinic_address || undefined,
+            },
+            hospital: {
+                name: branding.name || 'CareConnect',
+                primaryColor: branding.primaryColor || '#1a3a52',
+                secondaryColor: '#7bc041',
+                headingFont: 'system-ui, sans-serif',
+                bodyFont: 'system-ui, sans-serif',
+                logoUrl,
+            },
+            patient: {
+                full_name: formData.patientName,
+                date_of_birth: null,
+            } as any,
+            patientAgeOverride: formData.patientAge || undefined,
+        });
+
+        const pdf = await Print.printToFileAsync({ html, base64: false });
+
+        // Build filename
+        const patientSlug = (formData.patientName || 'patient')
+            .toLowerCase()
+            .replace(/\s+/g, '-')
+            .replace(/[^a-z0-9-]/g, '');
+        const shortId = formData.diagnosis.slice(0, 8).toLowerCase().replace(/\s+/g, '-');
+        const filename = `prescription-${patientSlug}-${shortId}.pdf`;
+
+        const srcFile = new File(pdf.uri);
+        const destFile = new File(Paths.cache, filename);
+        if (destFile.exists) destFile.delete();
+        srcFile.copy(destFile);
+
+        if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(destFile.uri, {
+                mimeType: 'application/pdf',
+                dialogTitle: `Prescription - ${formData.diagnosis}`,
+                UTI: 'com.adobe.pdf',
+            });
+        } else {
+            Alert.alert('Success', `PDF saved as ${filename}`);
+        }
+    } catch (error) {
+        console.error('PDF Gen: Error -', error);
+        Alert.alert('Error', 'Failed to generate prescription PDF.');
+    }
+}
+
 // ─── Main Component ───────────────────────────────────────────────────
 
 export default function NewPrescriptionModal({
@@ -744,15 +779,18 @@ export default function NewPrescriptionModal({
     patientAge = '',
     patientGender = '',
     onPrescriptionCreated,
+    onRefreshChart,
 }: NewPrescriptionModalProps) {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
-    const { panHandlers, animatedStyle } = useSwipeDown(onClose);
     const { token } = useAuth();
+    const refreshChartCallbackRef = useRef<(() => void) | null>(null);
     const [activeTab, setActiveTab] = useState<TabId>('edit');
     const [doctorProfile, setDoctorProfile] = useState<DoctorProfile | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
     const [showSlotPicker, setShowSlotPicker] = useState(false);
     const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
     const [slotsLoading, setSlotsLoading] = useState(false);
@@ -770,6 +808,13 @@ export default function NewPrescriptionModal({
     const [vitals, setVitals] = useState<Vitals>({ ...emptyVitals });
     const [medications, setMedications] = useState<Medication[]>([emptyMedication()]);
 
+    // Register refresh callback
+    useEffect(() => {
+        onRefreshChart?.(() => {
+            refreshChartCallbackRef.current?.();
+        });
+    }, [onRefreshChart]);
+
     // Fetch doctor profile on open
     useEffect(() => {
         if (visible && token) {
@@ -783,6 +828,32 @@ export default function NewPrescriptionModal({
             setFollowUpBooked(false);
         }
     }, [visible, token]);
+
+    // Fetch and cache logo as base64 data URL
+    useEffect(() => {
+        const branding = getBranding();
+        const logoUrl = branding.logoUrl;
+        if (!logoUrl) {
+            setLogoDataUrl(null);
+            return;
+        }
+
+        const fetchLogo = async () => {
+            try {
+                const response = await fetch(logoUrl);
+                const blob = await response.blob();
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    setLogoDataUrl(reader.result as string);
+                };
+                reader.readAsDataURL(blob);
+            } catch {
+                setLogoDataUrl(null);
+            }
+        };
+
+        fetchLogo();
+    }, []);
 
     // Reset form when patient changes
     useEffect(() => {
@@ -873,6 +944,7 @@ export default function NewPrescriptionModal({
                 }
 
                 onPrescriptionCreated?.();
+                refreshChartCallbackRef.current?.();
             } catch (err) {
                 console.error('Failed to save prescription:', err);
             } finally {
@@ -916,6 +988,7 @@ export default function NewPrescriptionModal({
             setActiveTab('preview');
             setShowSuccess(true);
             onPrescriptionCreated?.();
+            refreshChartCallbackRef.current?.();
         }
     }, [patientId, doctorProfile, token, formData.followUpDate, formData.diagnosis, onPrescriptionCreated]);
 
@@ -951,21 +1024,14 @@ export default function NewPrescriptionModal({
 
     return (
         <>
-            <Modal
-                animationType="slide"
-                transparent
-                visible={visible}
-                onRequestClose={onClose}
-            >
+            <ThemedBottomSheet visible={visible} onClose={onClose}>
                 {/* Backdrop */}
-                <Pressable style={s.backdrop} onPress={onClose} />
+                
 
                 {/* Sheet */}
-                <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom, backgroundColor: colors.surface }]}>
+                
                     {/* Handle */}
-                    <View style={s.handleRow} {...panHandlers}>
-                        <View style={[s.handle, { backgroundColor: colors.border }]} />
-                    </View>
+                    
 
                     {/* Header */}
                     <View style={s.header}>
@@ -1014,7 +1080,7 @@ export default function NewPrescriptionModal({
                             setMedications={setMedications}
                         />
                     ) : (
-                        <PreviewTab formData={formData} vitals={vitals} medications={medications} doctorProfile={doctorProfile} />
+                        <PreviewTab formData={formData} vitals={vitals} medications={medications} doctorProfile={doctorProfile} logoDataUrl={logoDataUrl} />
                     )}
 
                     {/* Footer */}
@@ -1029,21 +1095,34 @@ export default function NewPrescriptionModal({
                                     <ThemedText color="brand" weight="medium" size="sm" style={[s.footerOutlineText, { color: colors.primary }]}>WhatsApp</ThemedText>
                                 </Pressable>
                                 <Pressable
-                                    onPress={() => {
-                                        // PDF download requires expo-print / expo-sharing — note for later install
-                                        Alert.alert(
-                                            'PDF Download',
-                                            'PDF generation requires expo-print and expo-sharing packages. Install them with: npx expo install expo-print expo-sharing',
-                                        );
+                                    onPress={async () => {
+                                        setIsDownloadingPDF(true);
+                                        try {
+                                            const branding = getBranding();
+                                            await generateAndDownloadPDF(formData, vitals, medications, doctorProfile, branding, logoDataUrl || undefined);
+                                        } finally {
+                                            setIsDownloadingPDF(false);
+                                        }
                                     }}
+                                    disabled={isDownloadingPDF}
                                     style={({ pressed }) => [
                                         s.footerPrimary,
                                         { backgroundColor: colors.primary },
+                                        isDownloadingPDF && { opacity: 0.6 },
                                         pressed && { backgroundColor: colors.primaryDark },
                                     ]}
                                 >
-                                    <Feather name="download" size={15} color="#fff" />
-                                    <ThemedText weight="semiBold" size="sm" style={s.footerPrimaryText}>Download PDF</ThemedText>
+                                    {isDownloadingPDF ? (
+                                        <>
+                                            <ActivityIndicator size="small" color="#fff" />
+                                            <ThemedText weight="semiBold" size="sm" style={s.footerPrimaryText}>Generating...</ThemedText>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Feather name="download" size={15} color="#fff" />
+                                            <ThemedText weight="semiBold" size="sm" style={s.footerPrimaryText}>Download PDF</ThemedText>
+                                        </>
+                                    )}
                                 </Pressable>
                             </>
                         ) : (
@@ -1076,17 +1155,25 @@ export default function NewPrescriptionModal({
                             </>
                         )}
                     </View>
-                </Animated.View>
-            </Modal>
+                
+            </ThemedBottomSheet>
 
             <ThemedAlert
                 visible={showSuccess}
                 variant="success"
                 icon="check-circle"
                 title="Prescription Saved"
-                message={`Prescription for ${formData.patientName || 'patient'} saved successfully.${followUpBooked ? ' Follow-up appointment booked.' : ''} You can now download or share via WhatsApp.`}
-                confirmLabel="Continue"
-                onConfirm={() => setShowSuccess(false)}
+                message={`Prescription for ${formData.patientName || 'patient'} saved successfully.${followUpBooked ? ' Follow-up appointment booked.' : ''}`}
+                confirmLabel="Download PDF"
+                onConfirm={() => {
+                    setShowSuccess(false);
+                    const branding = getBranding();
+                    setIsDownloadingPDF(true);
+                    generateAndDownloadPDF(formData, vitals, medications, doctorProfile, branding, logoDataUrl || undefined)
+                        .finally(() => setIsDownloadingPDF(false));
+                }}
+                cancelLabel="Continue"
+                onCancel={() => setShowSuccess(false)}
             />
 
             {/* ── Slot Picker Overlay (conflict resolution) ── */}
@@ -1112,19 +1199,10 @@ export default function NewPrescriptionModal({
 
 const s = StyleSheet.create({
     // Shell
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-    sheet: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: SCREEN_HEIGHT * 0.93,
-        borderTopLeftRadius: radii.xl,
-        borderTopRightRadius: radii.xl,
-        ...shadows.elevated,
-    },
-    handleRow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
-    handle: { width: 40, height: 4, borderRadius: 2 },
+    
+    
+    
+    
 
     // Header
     header: {

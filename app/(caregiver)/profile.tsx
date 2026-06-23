@@ -77,12 +77,7 @@ export default function ProfileScreen() {
         <SafeAreaView style={styles.container}>
             {/* ── Header ── */}
             <ThemedView style={styles.header}>
-                <Pressable
-                    style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
-                    onPress={() => router.back()}
-                >
-                    <Feather name="chevron-left" size={22} color={colors.textPrimary} />
-                </Pressable>
+                <ThemedView style={{ width: 40 }} />
                 <ThemedText weight="semiBold" size="lg" style={styles.headerTitle}>Your Profile</ThemedText>
                 <ThemedView style={{ width: 40 }} />
             </ThemedView>

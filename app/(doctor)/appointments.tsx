@@ -58,10 +58,12 @@ function avatarColor(name: string): string {
 
 // ─── Helpers (matching web) ─────────────────────────────────────────────────
 
-/** Map backend status → display status */
-function mapStatus(s: AppointmentStatus): 'upcoming' | 'completed' {
+/** Map backend status + scheduled time → display status */
+function mapStatus(s: AppointmentStatus, scheduledTime: string): 'upcoming' | 'overdue' | 'completed' {
     if (s === 'COMPLETED' || s === 'CANCELLED') return 'completed';
-    return 'upcoming'; // CONFIRMED, IN_PROGRESS → upcoming
+    // If the appointment time has already passed and was never completed, it is overdue
+    if (new Date(scheduledTime) < new Date()) return 'overdue';
+    return 'upcoming';
 }
 
 function formatDate(iso: string): string {
@@ -85,7 +87,7 @@ interface DisplayAppointment {
     date: string;
     time: string;
     type: string;
-    displayStatus: 'upcoming' | 'completed';
+    displayStatus: 'upcoming' | 'overdue' | 'completed';
     reason: string | null;
 }
 
@@ -103,7 +105,7 @@ function enrichAppointments(
             : a.appointment_type === 'FOLLOW_UP' ? 'Follow-up'
                 : a.appointment_type === 'NEW_PATIENT' ? 'New Patient'
                     : 'In-Person',
-        displayStatus: mapStatus(a.status),
+        displayStatus: mapStatus(a.status, a.scheduled_time),
         reason: a.reason,
     }));
 }
@@ -128,31 +130,24 @@ function Avatar({ name, size = 44 }: { name: string; size?: number }) {
     );
 }
 
-function StatusBadge({ status }: { status: 'upcoming' | 'completed' }) {
-    const isUpcoming = status === 'upcoming';
+function StatusBadge({ status }: { status: 'upcoming' | 'overdue' | 'completed' }) {
     const { colors } = useTheme();
+
+    const config = {
+        upcoming:  { bg: '#DCFCE7', dot: '#22C55E', text: '#15803D', label: 'Confirmed' },
+        overdue:   { bg: '#FEF3C7', dot: '#D97706', text: '#92400E', label: 'Overdue' },
+        completed: { bg: colors.surfaceMuted, dot: colors.textMuted, text: colors.textSecondary, label: 'Completed' },
+    }[status];
+
     return (
-        <View
-            style={[
-                s.badge,
-                { backgroundColor: isUpcoming ? '#DCFCE7' : colors.surfaceMuted },
-            ]}
-        >
-            <View
-                style={[
-                    s.badgeDot,
-                    { backgroundColor: isUpcoming ? '#22C55E' : colors.textMuted },
-                ]}
-            />
+        <View style={[s.badge, { backgroundColor: config.bg }]}>
+            <View style={[s.badgeDot, { backgroundColor: config.dot }]} />
             <ThemedText
                 weight="medium"
                 size="xs"
-                style={[
-                    s.badgeText,
-                    { color: isUpcoming ? '#15803D' : colors.textSecondary },
-                ]}
+                style={[s.badgeText, { color: config.text }]}
             >
-                {isUpcoming ? 'Confirmed' : 'Completed'}
+                {config.label}
             </ThemedText>
         </View>
     );
@@ -169,7 +164,7 @@ function AppointmentCard({
     onJoin: () => void;
     onReschedule: () => void;
 }) {
-    const isUpcoming = appointment.displayStatus === 'upcoming';
+    const { displayStatus } = appointment;
     const { colors } = useTheme();
 
     return (
@@ -184,42 +179,53 @@ function AppointmentCard({
                     </ThemedText>
                     <ThemedText color="secondary" weight="medium" size="xs" style={s.cardType}>{appointment.type}</ThemedText>
                 </View>
-                <StatusBadge status={appointment.displayStatus} />
+                <StatusBadge status={displayStatus} />
             </View>
 
             {/* Action row */}
             <View style={[s.cardActions, { borderTopColor: colors.borderLight }]}>
-                {isUpcoming ? (
+                {displayStatus === 'upcoming' && (
                     <>
                         <Pressable
-                            style={({ pressed }) => [
-                                s.rescheduleBtn,
-                                pressed && { opacity: 0.85 },
-                            ]}
+                            style={({ pressed }) => [s.rescheduleBtn, pressed && { opacity: 0.85 }]}
                             onPress={onReschedule}
                         >
                             <Feather name="calendar" size={15} color="#D97706" />
                             <ThemedText weight="medium" size="sm" style={s.rescheduleBtnText}>Reschedule</ThemedText>
                         </Pressable>
                         <Pressable
-                            style={({ pressed }) => [
-                                s.joinBtn,
-                                { backgroundColor: colors.primary },
-                                pressed && { opacity: 0.85 },
-                            ]}
+                            style={({ pressed }) => [s.joinBtn, { backgroundColor: colors.primary }, pressed && { opacity: 0.85 }]}
                             onPress={onJoin}
                         >
                             <Feather name="video" size={15} color="#fff" />
                             <ThemedText weight="semiBold" size="sm" style={s.joinBtnText}>Join Call</ThemedText>
                         </Pressable>
                     </>
-                ) : (
+                )}
+
+                {displayStatus === 'overdue' && (
+                    // Overdue: still let the doctor join (they might be late) but surface the overdue state
+                    <>
+                        <Pressable
+                            style={({ pressed }) => [s.rescheduleBtn, pressed && { opacity: 0.85 }]}
+                            onPress={onReschedule}
+                        >
+                            <Feather name="calendar" size={15} color="#D97706" />
+                            <ThemedText weight="medium" size="sm" style={s.rescheduleBtnText}>Reschedule</ThemedText>
+                        </Pressable>
+                        <Pressable
+                            style={({ pressed }) => [s.joinBtn, { backgroundColor: '#D97706' }, pressed && { opacity: 0.85 }]}
+                            onPress={onJoin}
+                        >
+                            <Feather name="video" size={15} color="#fff" />
+                            <ThemedText weight="semiBold" size="sm" style={s.joinBtnText}>Join Late</ThemedText>
+                        </Pressable>
+                    </>
+                )}
+
+                {displayStatus === 'completed' && appointment.type === 'Video Consultation' && (
                     <Pressable
-                        style={({ pressed }) => [
-                            s.summaryBtn,
-                            { borderColor: colors.borderLight },
-                            pressed && { opacity: 0.7 },
-                        ]}
+                        style={({ pressed }) => [s.summaryBtn, { borderColor: colors.borderLight }, pressed && { opacity: 0.7 }]}
                         onPress={() => { }}
                     >
                         <Feather name="file-text" size={15} color={colors.primary} />
@@ -284,8 +290,6 @@ export default function AppointmentsScreen() {
         return displayAppointments.filter((a) => a.patientName.toLowerCase().includes(q));
     }, [search, displayAppointments]);
 
-    const upcomingCount = filtered.filter((a) => a.displayStatus === 'upcoming').length;
-    const completedCount = filtered.filter((a) => a.displayStatus === 'completed').length;
 
     const visibleAppointments = filtered.slice(0, visibleCount);
 
@@ -333,17 +337,6 @@ export default function AppointmentsScreen() {
                 </ThemedText>
             </View>
 
-            <View style={s.statusRow}>
-                <View style={s.statusPill}>
-                    <View style={[s.statusDot, { backgroundColor: '#22C55E' }]} />
-                    <ThemedText color="muted" size="sm" style={s.statusText}>Upcoming ({upcomingCount})</ThemedText>
-                </View>
-                <View style={[s.statusDivider, { backgroundColor: colors.border }]} />
-                <View style={s.statusPill}>
-                    <View style={[s.statusDot, { backgroundColor: colors.textMuted }]} />
-                    <ThemedText color="muted" size="sm" style={s.statusText}>Completed ({completedCount})</ThemedText>
-                </View>
-            </View>
 
             <View style={[s.searchBar, { borderColor: colors.border, backgroundColor: colors.surface }]}>
                 <Feather name="search" size={20} color={colors.textMuted} />
@@ -446,31 +439,6 @@ const s = StyleSheet.create({
     },
     headerSubtitle: {
         marginTop: spacing.xs,
-    },
-
-    // Status Pills (matching web)
-    statusRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: spacing.xl,
-        marginBottom: spacing.md,
-        gap: spacing.md,
-    },
-    statusPill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: spacing.xs,
-    },
-    statusDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-    },
-    statusText: {
-    },
-    statusDivider: {
-        width: 1,
-        height: 16,
     },
 
     // Search bar

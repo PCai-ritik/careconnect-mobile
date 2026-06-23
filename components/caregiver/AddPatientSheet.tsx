@@ -7,7 +7,7 @@
  * Calls POST /patients — caregiver_id auto-resolved by backend.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -18,11 +18,12 @@ import {
     ActivityIndicator,
     StyleSheet,
     Dimensions,
-    KeyboardAvoidingView,
     Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { ThemedBottomSheet } from '@/components/shared/ThemedBottomSheet';
 import {
     patientColors,
     spacing,
@@ -51,6 +52,7 @@ export interface PatientFormData {
     gender?: string;
     blood_group?: string;
     address?: string;
+    aadhar_number?: string;
     allergies?: string[];
     existing_conditions?: string[];
     emergency_contact_name?: string;
@@ -68,8 +70,10 @@ export default function AddPatientSheet({ visible, onClose, onPatientAdded, onSu
     const [gender, setGender] = useState('');
     const [bloodGroup, setBloodGroup] = useState('');
     const [address, setAddress] = useState('');
+    const [aadharNumber, setAadharNumber] = useState('');
     const [allergies, setAllergies] = useState('');
     const [conditions, setConditions] = useState('');
+    const [showDatePicker, setShowDatePicker] = useState(false);
     const [emergencyName, setEmergencyName] = useState('');
     const [emergencyPhone, setEmergencyPhone] = useState('');
 
@@ -82,10 +86,26 @@ export default function AddPatientSheet({ visible, onClose, onPatientAdded, onSu
         setGender('');
         setBloodGroup('');
         setAddress('');
+        setAadharNumber('');
         setAllergies('');
         setConditions('');
         setEmergencyName('');
         setEmergencyPhone('');
+    };
+
+    useEffect(() => {
+        if (!visible) {
+            resetForm();
+        }
+    }, [visible]);
+
+    const onDateChange = (event: any, selectedDate?: Date) => {
+        if (Platform.OS === 'android') {
+            setShowDatePicker(false);
+        }
+        if (selectedDate) {
+            setDob(selectedDate.toISOString().split('T')[0]);
+        }
     };
 
     const handleSubmit = async () => {
@@ -100,6 +120,7 @@ export default function AddPatientSheet({ visible, onClose, onPatientAdded, onSu
             if (gender) data.gender = gender;
             if (bloodGroup) data.blood_group = bloodGroup;
             if (address) data.address = address;
+            if (aadharNumber) data.aadhar_number = aadharNumber.replace(/\s/g, '');
             if (allergies.trim()) data.allergies = allergies.split(',').map(s => s.trim()).filter(Boolean);
             if (conditions.trim()) data.existing_conditions = conditions.split(',').map(s => s.trim()).filter(Boolean);
             if (emergencyName) data.emergency_contact_name = emergencyName;
@@ -117,18 +138,11 @@ export default function AddPatientSheet({ visible, onClose, onPatientAdded, onSu
     };
 
     return (
-        <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
-            <Pressable style={styles.backdrop} onPress={onClose}><View /></Pressable>
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                style={[styles.sheet, { paddingBottom: insets.bottom }]}
-            >
-                <View style={styles.handleBar} />
-
-                {/* Header */}
+        <ThemedBottomSheet visible={visible} onClose={onClose}>
+            {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.headerIconCircle}>
-                        <Feather name="user-plus" size={20} color="#FFFFFF" />
+                        <Feather name="user-plus" size={20} color={patientColors.primary} />
                     </View>
                     <Text style={styles.headerTitle}>Add Patient</Text>
                     <Pressable onPress={onClose} style={styles.closeBtn}>
@@ -165,7 +179,27 @@ export default function AddPatientSheet({ visible, onClose, onPatientAdded, onSu
                         onChangeText={setDob}
                         placeholder="YYYY-MM-DD"
                         icon="calendar"
+                        editable={false}
+                        onPress={() => setShowDatePicker(true)}
                     />
+                    
+                    {showDatePicker && (
+                        <DateTimePicker
+                            value={dob ? new Date(dob) : new Date()}
+                            mode="date"
+                            display="default"
+                            onChange={onDateChange}
+                            maximumDate={new Date()}
+                        />
+                    )}
+                    {Platform.OS === 'ios' && showDatePicker && (
+                        <Pressable 
+                            style={{ alignSelf: 'flex-end', padding: 8 }} 
+                            onPress={() => setShowDatePicker(false)}
+                        >
+                            <Text style={{ color: patientColors.primary, fontWeight: 'bold' }}>Done</Text>
+                        </Pressable>
+                    )}
 
                     {/* Gender pills */}
                     <Text style={styles.fieldLabel}>Gender</Text>
@@ -194,6 +228,14 @@ export default function AddPatientSheet({ visible, onClose, onPatientAdded, onSu
                             </Pressable>
                         ))}
                     </View>
+
+                    <Field
+                        label="Aadhar Card Number"
+                        value={aadharNumber}
+                        onChangeText={(t) => setAadharNumber(t.replace(/\D/g, '').slice(0, 12).replace(/(\d{4})(?=\d)/g, '$1 '))}
+                        placeholder="XXXX XXXX XXXX"
+                        icon="credit-card"
+                    />
 
                     <Text style={[styles.sectionLabel, { marginTop: spacing.xl }]}>MEDICAL DETAILS</Text>
 
@@ -257,8 +299,7 @@ export default function AddPatientSheet({ visible, onClose, onPatientAdded, onSu
 
                     <View style={{ height: spacing['3xl'] }} />
                 </ScrollView>
-            </KeyboardAvoidingView>
-        </Modal>
+        </ThemedBottomSheet>
     );
 }
 
@@ -274,6 +315,8 @@ function Field({
     icon,
     keyboardType,
     multiline,
+    onPress,
+    editable = true,
 }: {
     label: string;
     value: string;
@@ -282,22 +325,36 @@ function Field({
     icon: FeatherIcon;
     keyboardType?: 'default' | 'phone-pad' | 'email-address';
     multiline?: boolean;
+    onPress?: () => void;
+    editable?: boolean;
 }) {
+    const inputContent = (
+        <View style={styles.inputRow}>
+            <Feather name={icon} size={16} color={patientColors.textMuted} />
+            <TextInput
+                style={[styles.input, multiline && { minHeight: 60, textAlignVertical: 'top' }, !editable && { color: patientColors.textPrimary }]}
+                value={value}
+                onChangeText={onChangeText}
+                placeholder={placeholder}
+                placeholderTextColor={patientColors.textMuted}
+                keyboardType={keyboardType ?? 'default'}
+                multiline={multiline}
+                editable={editable}
+                pointerEvents={editable ? 'auto' : 'none'}
+            />
+        </View>
+    );
+
     return (
         <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>{label}</Text>
-            <View style={styles.inputRow}>
-                <Feather name={icon} size={16} color={patientColors.textMuted} />
-                <TextInput
-                    style={[styles.input, multiline && { minHeight: 60, textAlignVertical: 'top' }]}
-                    value={value}
-                    onChangeText={onChangeText}
-                    placeholder={placeholder}
-                    placeholderTextColor={patientColors.textMuted}
-                    keyboardType={keyboardType ?? 'default'}
-                    multiline={multiline}
-                />
-            </View>
+            {onPress ? (
+                <Pressable onPress={onPress}>
+                    {inputContent}
+                </Pressable>
+            ) : (
+                inputContent
+            )}
         </View>
     );
 }
@@ -305,18 +362,6 @@ function Field({
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-    sheet: {
-        position: 'absolute', bottom: 0, left: 0, right: 0,
-        height: SHEET_HEIGHT, backgroundColor: patientColors.surface,
-        borderTopLeftRadius: 24, borderTopRightRadius: 24,
-        ...shadows.elevated,
-    },
-    handleBar: {
-        width: 40, height: 4, borderRadius: 2,
-        backgroundColor: patientColors.border, alignSelf: 'center',
-        marginTop: spacing.sm,
-    },
     header: {
         flexDirection: 'row', alignItems: 'center',
         paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
@@ -324,7 +369,7 @@ const styles = StyleSheet.create({
     },
     headerIconCircle: {
         width: 36, height: 36, borderRadius: radii.full,
-        backgroundColor: patientColors.primary,
+        backgroundColor: '#FFFFFF',
         alignItems: 'center', justifyContent: 'center',
     },
     headerTitle: {

@@ -18,8 +18,9 @@ import {
     ActivityIndicator,
     Animated,
 } from 'react-native';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { ThemedBottomSheet } from '@/components/shared/ThemedBottomSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import useSwipeDown from '@/hooks/useSwipeDown';
 import { Feather } from '@expo/vector-icons';
 import {
     spacing,
@@ -42,7 +43,6 @@ const ACCOUNT_TYPES = ['Savings', 'Checking'] as const;
 export default function AddBankAccountModal({ visible, onClose }: AddBankAccountModalProps) {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
-    const { panHandlers, animatedStyle } = useSwipeDown(onClose);
     const [holderName, setHolderName] = useState('');
     const [bankName, setBankName] = useState('');
     const [accountNumber, setAccountNumber] = useState('');
@@ -75,25 +75,18 @@ export default function AddBankAccountModal({ visible, onClose }: AddBankAccount
 
     return (
         <>
-            <Modal
-                animationType="slide"
-                transparent
-                visible={visible}
-                onRequestClose={onClose}
-            >
-                <Pressable style={s.backdrop} onPress={onClose} />
+            <ThemedBottomSheet visible={visible} onClose={onClose}>
+                
 
-                <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom, backgroundColor: colors.surface }]}>
-                    <View style={s.handleRow} {...panHandlers}>
-                        <View style={[s.handle, { backgroundColor: colors.border }]} />
-                    </View>
+                
+                    
 
                     {/* Header */}
                     <View style={s.header}>
                         <ThemedText color="primary" weight="bold" size="xl" style={s.headerTitle}>Add Bank Account</ThemedText>
                     </View>
 
-                    <ScrollView
+                    <BottomSheetScrollView
                         style={s.scrollArea}
                         showsVerticalScrollIndicator={false}
                         contentContainerStyle={s.scrollInner}
@@ -167,7 +160,7 @@ export default function AddBankAccountModal({ visible, onClose }: AddBankAccount
                                 </Pressable>
                             ))}
                         </View>
-                    </ScrollView>
+                    </BottomSheetScrollView>
 
                     {/* Footer */}
                     <View style={[s.footer, { borderTopColor: colors.borderLight }]}>
@@ -191,8 +184,8 @@ export default function AddBankAccountModal({ visible, onClose }: AddBankAccount
                             )}
                         </Pressable>
                     </View>
-                </Animated.View>
-            </Modal>
+                
+            </ThemedBottomSheet>
 
             <ThemedAlert
                 visible={showSuccess}
@@ -212,19 +205,10 @@ export default function AddBankAccountModal({ visible, onClose }: AddBankAccount
 }
 
 const s = StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-    sheet: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: SCREEN_HEIGHT * 0.85,
-        borderTopLeftRadius: radii.xl,
-        borderTopRightRadius: radii.xl,
-        ...shadows.elevated,
-    },
-    handleRow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
-    handle: { width: 40, height: 4, borderRadius: 2 },
+    
+    
+    
+    
     header: {
         flexDirection: 'row',
         alignItems: 'center',

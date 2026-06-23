@@ -30,7 +30,7 @@ import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 
 import { useAuth } from '@/hooks/useAuth';
-import { submitDoctorOnboarding, submitDoctorAvailability } from '@/services/doctor';
+import { submitDoctorOnboarding, submitDoctorAvailability, verifyMedicalLicense } from '@/services/doctor';
 import {
     doctorColors,
     spacing,
@@ -41,16 +41,21 @@ import {
 
 // -- Types --
 
-interface DaySchedule {
-    enabled: boolean;
+interface TimeInterval {
     startTime: string;
     endTime: string;
+}
+
+interface DaySchedule {
+    enabled: boolean;
+    intervals: TimeInterval[];
 }
 
 interface VerificationData {
     licenseNumber: string;
     licenseState: string;
-    hospitalAffiliation: string;
+    clinicName: string;
+    clinicAddress: string;
     bio: string;
     localDocumentUri: string;
     specialization: string;
@@ -59,6 +64,8 @@ interface VerificationData {
 
 interface AvailabilityData {
     schedule: Record<string, DaySchedule>;
+    acceptsInPerson: boolean;
+    inPersonSchedule: Record<string, DaySchedule>;
     consultationDuration: string;
     timezone: string;
 }
@@ -75,42 +82,17 @@ interface PaymentsData {
     privacyAccepted: boolean;
 }
 
-// -- Mock AI Function --
-
-// TODO: [BACKEND GATE] Replace with real OCR/AI API.
-// This function simulates sending a document to an AI service
-// that extracts medical license information from uploaded credentials.
-async function mockAnalyzeDocument(_fileUri: string): Promise<{
-    licenseNumber: string;
-    licenseState: string;
-    hospitalAffiliation: string;
-}> {
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            resolve({
-                licenseNumber: 'MD-8472910',
-                licenseState: 'California, USA',
-                hospitalAffiliation: 'Cedars-Sinai Medical Center',
-            });
-        }, 2500);
-    });
-}
 
 // -- Constants --
 
 const STEPS = [
     { title: 'Verification', icon: 'shield' as const },
-    { title: 'Availability', icon: 'calendar' as const },
+    { title: 'Video', icon: 'camera' as const },
+    { title: 'In-Person', icon: 'map-pin' as const },
     { title: 'Payments', icon: 'credit-card' as const },
 ];
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-const TIME_OPTIONS = [
-    '06:00', '07:00', '08:00', '09:00', '10:00', '11:00',
-    '12:00', '13:00', '14:00', '15:00', '16:00', '17:00',
-    '18:00', '19:00', '20:00', '21:00', '22:00',
-];
 
 const DURATION_OPTIONS = ['15 min', '30 min', '45 min', '60 min'];
 
@@ -152,10 +134,199 @@ const defaultSchedule: Record<string, DaySchedule> = DAYS.reduce((acc, day) => (
     ...acc,
     [day]: {
         enabled: day !== 'Saturday' && day !== 'Sunday',
-        startTime: '09:00',
-        endTime: '17:00',
+        intervals: [{ startTime: '09:00', endTime: '17:00' }],
     },
 }), {} as Record<string, DaySchedule>);
+
+// -- TimeDial --
+
+function pad(n: number) {
+    return String(n).padStart(2, '0');
+}
+
+function TimeDial({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+    const [h, m] = value.split(':').map(Number);
+    const setH = (next: number) => onChange(`${pad(((next % 24) + 24) % 24)}:${pad(m)}`);
+    const setM = (next: number) => onChange(`${pad(h)}:${pad(((next % 60) + 60) % 60)}`);
+
+    return (
+        <View style={dialS.row}>
+            <View style={dialS.col}>
+                <Pressable onPress={() => setH(h + 1)} hitSlop={8} style={dialS.arrow}>
+                    <Feather name="chevron-up" size={14} color={doctorColors.primary} />
+                </Pressable>
+                <View style={dialS.digitBox}>
+                    <Text style={dialS.digit}>{pad(h)}</Text>
+                </View>
+                <Pressable onPress={() => setH(h - 1)} hitSlop={8} style={dialS.arrow}>
+                    <Feather name="chevron-down" size={14} color={doctorColors.primary} />
+                </Pressable>
+            </View>
+            <Text style={dialS.colon}>:</Text>
+            <View style={dialS.col}>
+                <Pressable onPress={() => setM(m + 15)} hitSlop={8} style={dialS.arrow}>
+                    <Feather name="chevron-up" size={14} color={doctorColors.primary} />
+                </Pressable>
+                <View style={dialS.digitBox}>
+                    <Text style={dialS.digit}>{pad(m)}</Text>
+                </View>
+                <Pressable onPress={() => setM(m - 15)} hitSlop={8} style={dialS.arrow}>
+                    <Feather name="chevron-down" size={14} color={doctorColors.primary} />
+                </Pressable>
+            </View>
+        </View>
+    );
+}
+
+const dialS = StyleSheet.create({
+    row: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+    col: { alignItems: 'center', gap: 2 },
+    arrow: { width: 28, height: 20, alignItems: 'center', justifyContent: 'center' },
+    digitBox: {
+        width: 32,
+        paddingVertical: 4,
+        borderRadius: radii.sm,
+        borderWidth: 1,
+        borderColor: doctorColors.border,
+        backgroundColor: doctorColors.surface,
+        alignItems: 'center',
+    },
+    digit: {
+        fontFamily: typography.fontFamily.semiBold,
+        fontSize: 13,
+        color: doctorColors.textPrimary,
+    },
+    colon: {
+        fontFamily: typography.fontFamily.bold,
+        fontSize: 16,
+        color: doctorColors.textMuted,
+        marginBottom: 2,
+        marginHorizontal: 1,
+    },
+});
+
+// -- DayCard --
+
+function DayCard({
+    day,
+    sched,
+    onToggle,
+    onUpdateInterval,
+    onAddInterval,
+    onRemoveInterval,
+}: {
+    day: string;
+    sched: DaySchedule;
+    onToggle: () => void;
+    onUpdateInterval: (idx: number, field: 'startTime' | 'endTime', value: string) => void;
+    onAddInterval: () => void;
+    onRemoveInterval: (idx: number) => void;
+}) {
+    return (
+        <View style={[
+            cardS.card,
+            {
+                borderColor: sched.enabled ? doctorColors.primary + '33' : doctorColors.border,
+                backgroundColor: sched.enabled ? doctorColors.primaryLight + '18' : doctorColors.surface,
+            },
+        ]}>
+            <View style={cardS.topRow}>
+                <Text style={[cardS.dayName, { color: sched.enabled ? doctorColors.textPrimary : doctorColors.textMuted }]}>
+                    {day}
+                </Text>
+                <Switch
+                    value={sched.enabled}
+                    onValueChange={onToggle}
+                    trackColor={{ false: doctorColors.border, true: doctorColors.primary }}
+                    thumbColor="#FFFFFF"
+                />
+            </View>
+            {sched.enabled && (
+                <View style={cardS.intervals}>
+                    {sched.intervals.map((interval, idx) => (
+                        <View key={idx} style={cardS.intervalRow}>
+                            <TimeDial
+                                value={interval.startTime}
+                                onChange={(v) => onUpdateInterval(idx, 'startTime', v)}
+                            />
+                            <Text style={cardS.toText}>to</Text>
+                            <TimeDial
+                                value={interval.endTime}
+                                onChange={(v) => onUpdateInterval(idx, 'endTime', v)}
+                            />
+                            <View style={cardS.ctrlBtns}>
+                                {sched.intervals.length > 1 && (
+                                    <Pressable
+                                        onPress={() => onRemoveInterval(idx)}
+                                        hitSlop={6}
+                                        style={({ pressed }) => [cardS.ctrlBtn, pressed && { opacity: 0.6 }]}
+                                    >
+                                        <Feather name="x" size={14} color="#EF4444" />
+                                    </Pressable>
+                                )}
+                                {idx === sched.intervals.length - 1 && (
+                                    <Pressable
+                                        onPress={onAddInterval}
+                                        hitSlop={6}
+                                        style={({ pressed }) => [cardS.ctrlBtn, pressed && { opacity: 0.6 }]}
+                                    >
+                                        <Feather name="plus" size={14} color={doctorColors.primary} />
+                                    </Pressable>
+                                )}
+                            </View>
+                        </View>
+                    ))}
+                </View>
+            )}
+        </View>
+    );
+}
+
+const cardS = StyleSheet.create({
+    card: {
+        borderWidth: 1,
+        borderRadius: radii.md,
+        padding: spacing.lg,
+        marginBottom: spacing.md,
+    },
+    topRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    dayName: {
+        fontFamily: typography.fontFamily.semiBold,
+        fontSize: 15,
+    },
+    intervals: {
+        marginTop: spacing.md,
+        gap: spacing.sm,
+    },
+    intervalRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        flexWrap: 'wrap',
+    },
+    toText: {
+        fontFamily: typography.fontFamily.regular,
+        fontSize: 12,
+        color: doctorColors.textMuted,
+    },
+    ctrlBtns: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+        marginLeft: spacing.xs,
+    },
+    ctrlBtn: {
+        width: 26,
+        height: 26,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: radii.sm,
+    },
+});
 
 // -- Component --
 
@@ -172,7 +343,8 @@ export default function DoctorOnboardingScreen() {
     const [verification, setVerification] = useState<VerificationData>({
         licenseNumber: '',
         licenseState: '',
-        hospitalAffiliation: '',
+        clinicName: '',
+        clinicAddress: '',
         bio: '',
         localDocumentUri: '',
         specialization: '',
@@ -186,6 +358,8 @@ export default function DoctorOnboardingScreen() {
     // Step 2: Availability
     const [availability, setAvailability] = useState<AvailabilityData>({
         schedule: { ...defaultSchedule },
+        acceptsInPerson: true,
+        inPersonSchedule: { ...defaultSchedule },
         consultationDuration: '30 min',
         timezone: 'Asia/Kolkata (IST, UTC+5:30)',
     });
@@ -209,7 +383,7 @@ export default function DoctorOnboardingScreen() {
     // -- Navigation --
 
     const goNext = () => {
-        if (currentStep < 2) {
+        if (currentStep < 3) {
             setCurrentStep(currentStep + 1);
             scrollRef.current?.scrollTo({ y: 0, animated: true });
         }
@@ -237,16 +411,28 @@ export default function DoctorOnboardingScreen() {
             setVerification((prev) => ({ ...prev, localDocumentUri: file.uri }));
             setIsAnalyzing(true);
 
-            const extracted = await mockAnalyzeDocument(file.uri);
+            const SecureStore = await import('expo-secure-store');
+            const token = await SecureStore.getItemAsync('careconnect_onboarding_token');
+            if (!token) {
+                Alert.alert('Session Error', 'Could not retrieve your session. Please go back and try again.');
+                return;
+            }
+
+            const extracted = await verifyMedicalLicense(
+                token,
+                file.uri,
+                file.name ?? 'license.jpg',
+                file.mimeType ?? 'image/jpeg',
+            );
 
             setVerification((prev) => ({
                 ...prev,
-                licenseNumber: extracted.licenseNumber,
-                licenseState: extracted.licenseState,
-                hospitalAffiliation: extracted.hospitalAffiliation,
+                licenseNumber: extracted.license_number,
+                licenseState: extracted.license_state,
             }));
-        } catch {
-            Alert.alert('Upload Failed', 'Could not read the document. Please try again.');
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Could not verify the document. Please try again.';
+            Alert.alert('Verification Failed', message);
         } finally {
             setIsAnalyzing(false);
         }
@@ -254,26 +440,52 @@ export default function DoctorOnboardingScreen() {
 
     // -- Schedule Helpers --
 
-    const toggleDay = (day: string) => {
+    const toggleDay = (day: string, target: 'schedule' | 'inPersonSchedule' = 'schedule') => {
         setAvailability((prev) => ({
             ...prev,
-            schedule: {
-                ...prev.schedule,
-                [day]: { ...prev.schedule[day], enabled: !prev.schedule[day].enabled },
+            [target]: {
+                ...prev[target],
+                [day]: { ...prev[target][day], enabled: !prev[target][day].enabled },
             },
         }));
     };
 
-    const cycleTime = (day: string, field: 'startTime' | 'endTime') => {
+    const updateIntervalField = (day: string, index: number, field: 'startTime' | 'endTime', value: string, target: 'schedule' | 'inPersonSchedule' = 'schedule') => {
         setAvailability((prev) => {
-            const current = prev.schedule[day][field];
-            const idx = TIME_OPTIONS.indexOf(current);
-            const next = TIME_OPTIONS[(idx + 1) % TIME_OPTIONS.length];
+            const intervals = [...prev[target][day].intervals];
+            intervals[index] = { ...intervals[index], [field]: value };
             return {
                 ...prev,
-                schedule: {
-                    ...prev.schedule,
-                    [day]: { ...prev.schedule[day], [field]: next },
+                [target]: {
+                    ...prev[target],
+                    [day]: { ...prev[target][day], intervals },
+                },
+            };
+        });
+    };
+
+    const addInterval = (day: string, target: 'schedule' | 'inPersonSchedule' = 'schedule') => {
+        setAvailability((prev) => ({
+            ...prev,
+            [target]: {
+                ...prev[target],
+                [day]: {
+                    ...prev[target][day],
+                    intervals: [...prev[target][day].intervals, { startTime: '09:00', endTime: '17:00' }],
+                },
+            },
+        }));
+    };
+
+    const removeInterval = (day: string, index: number, target: 'schedule' | 'inPersonSchedule' = 'schedule') => {
+        setAvailability((prev) => {
+            const newIntervals = [...prev[target][day].intervals];
+            newIntervals.splice(index, 1);
+            return {
+                ...prev,
+                [target]: {
+                    ...prev[target],
+                    [day]: { ...prev[target][day], intervals: newIntervals },
                 },
             };
         });
@@ -339,24 +551,52 @@ export default function DoctorOnboardingScreen() {
                 specialization: verification.specialization,
                 years_of_experience: verification.experience,
                 license_number: verification.licenseNumber,
-                hospital_affiliation: verification.hospitalAffiliation,
+                clinic_name: verification.clinicName,
+                clinic_address: verification.clinicAddress,
                 bio: verification.bio,
                 consultation_duration_minutes: durationNum,
-                consultation_fee: feeNum,
+                video_consultation_fee: feeNum,
+                in_person_consultation_fee: feeNum,
                 currency: payments.currency,
                 accepted_payment_methods: payments.acceptedPaymentMethods,
             });
 
             // 3. Submit availability schedule → PUT /doctors/availability
             // Transform Record<string, DaySchedule> → DoctorAvailabilitySlot[]
-            const slots = Object.entries(availability.schedule).map(([day, sched]) => ({
-                day_of_week: day.toUpperCase(),
-                start_time: `${sched.startTime}:00`,    // HH:MM → HH:MM:SS
-                end_time: `${sched.endTime}:00`,
-                is_enabled: sched.enabled,
-            }));
+            let slots: any[] = [];
+            Object.entries(availability.schedule).forEach(([day, sched]) => {
+                if (sched.enabled) {
+                    sched.intervals.forEach((interval) => {
+                        slots.push({
+                            day_of_week: day.toUpperCase(),
+                            start_time: `${interval.startTime}:00`,    // HH:MM → HH:MM:SS
+                            end_time: `${interval.endTime}:00`,
+                            is_enabled: true,
+                            appointment_type: 'VIDEO' as const,
+                        });
+                    });
+                }
+            });
 
-            await submitDoctorAvailability(token, slots);
+            if (availability.acceptsInPerson) {
+                Object.entries(availability.inPersonSchedule).forEach(([day, sched]) => {
+                    if (sched.enabled) {
+                        sched.intervals.forEach((interval) => {
+                            slots.push({
+                                day_of_week: day.toUpperCase(),
+                                start_time: `${interval.startTime}:00`,
+                                end_time: `${interval.endTime}:00`,
+                                is_enabled: true,
+                                appointment_type: 'IN_PERSON' as const,
+                            });
+                        });
+                    }
+                });
+            }
+
+            // Only submit slots that are enabled to save bandwidth
+            const enabledSlots = slots.filter(s => s.is_enabled);
+            await submitDoctorAvailability(token, enabledSlots as any);
 
             // 4. Clean up onboarding tokens
             await SecureStore.deleteItemAsync('careconnect_onboarding_token');
@@ -596,15 +836,29 @@ export default function DoctorOnboardingScreen() {
                             </View>
 
                             <View style={styles.inlineFieldGroup}>
-                                <Text style={styles.microLabel}>HOSPITAL / CLINIC AFFILIATION</Text>
+                                <Text style={styles.microLabel}>CLINIC / HOSPITAL NAME</Text>
                                 <View style={styles.inlineInputRow}>
                                     <Feather name="chevron-right" size={16} color={doctorColors.primary} style={styles.promptIcon} />
                                     <TextInput
                                         style={styles.inlineInput}
                                         placeholder="e.g. Doon Medical College"
                                         placeholderTextColor={doctorColors.textMuted}
-                                        value={verification.hospitalAffiliation}
-                                        onChangeText={(v) => setVerification((p) => ({ ...p, hospitalAffiliation: v }))}
+                                        value={verification.clinicName}
+                                        onChangeText={(v) => setVerification((p) => ({ ...p, clinicName: v }))}
+                                    />
+                                </View>
+                            </View>
+
+                            <View style={styles.inlineFieldGroup}>
+                                <Text style={styles.microLabel}>CLINIC / HOSPITAL ADDRESS</Text>
+                                <View style={styles.inlineInputRow}>
+                                    <Feather name="chevron-right" size={16} color={doctorColors.primary} style={styles.promptIcon} />
+                                    <TextInput
+                                        style={styles.inlineInput}
+                                        placeholder="e.g. 123 Health Ave..."
+                                        placeholderTextColor={doctorColors.textMuted}
+                                        value={verification.clinicAddress}
+                                        onChangeText={(v) => setVerification((p) => ({ ...p, clinicAddress: v }))}
                                     />
                                 </View>
                             </View>
@@ -702,37 +956,19 @@ export default function DoctorOnboardingScreen() {
                             </View>
 
                             {/* Schedule */}
-                            <Text style={styles.microLabel}>WEEKLY SCHEDULE</Text>
-                            <View style={styles.scheduleList}>
-                                {DAYS.map((day) => {
-                                    const sched = availability.schedule[day];
-                                    return (
-                                        <View key={day} style={styles.scheduleRow}>
-                                            <View style={styles.scheduleDayRow}>
-                                                <Switch
-                                                    value={sched.enabled}
-                                                    onValueChange={() => toggleDay(day)}
-                                                    trackColor={{ false: doctorColors.border, true: doctorColors.primaryLight }}
-                                                    thumbColor={sched.enabled ? doctorColors.primary : doctorColors.textMuted}
-                                                />
-                                                <Text style={[styles.dayName, !sched.enabled && styles.dayNameDisabled]}>
-                                                    {day}
-                                                </Text>
-                                            </View>
-                                            {sched.enabled && (
-                                                <View style={styles.timeRow}>
-                                                    <Pressable style={styles.timeButton} onPress={() => cycleTime(day, 'startTime')}>
-                                                        <Text style={styles.timeText}>{sched.startTime}</Text>
-                                                    </Pressable>
-                                                    <Text style={styles.timeSeparator}>to</Text>
-                                                    <Pressable style={styles.timeButton} onPress={() => cycleTime(day, 'endTime')}>
-                                                        <Text style={styles.timeText}>{sched.endTime}</Text>
-                                                    </Pressable>
-                                                </View>
-                                            )}
-                                        </View>
-                                    );
-                                })}
+                            <Text style={styles.microLabel}>VIDEO SCHEDULE</Text>
+                            <View>
+                                {DAYS.map((day) => (
+                                    <DayCard
+                                        key={day}
+                                        day={day}
+                                        sched={availability.schedule[day]}
+                                        onToggle={() => toggleDay(day, 'schedule')}
+                                        onUpdateInterval={(idx, field, val) => updateIntervalField(day, idx, field, val, 'schedule')}
+                                        onAddInterval={() => addInterval(day, 'schedule')}
+                                        onRemoveInterval={(idx) => removeInterval(day, idx, 'schedule')}
+                                    />
+                                ))}
                             </View>
 
                             <View style={styles.navRow}>
@@ -748,8 +984,61 @@ export default function DoctorOnboardingScreen() {
                         </View>
                     )}
 
-                    {/* ── Step 3: Payments & Consent ───────────────── */}
+                    {/* ── Step 3: In-Person Appointments ───────────────── */}
                     {currentStep === 2 && (
+                        <View style={styles.stepContent}>
+                            <View style={styles.stepHeader}>
+                                <View style={styles.stepIconCircle}>
+                                    <Feather name="map-pin" size={24} color={doctorColors.primary} />
+                                </View>
+                                <Text style={styles.stepTitle}>In-Person Appointments</Text>
+                            </View>
+
+                            <View style={styles.inlineFieldGroup}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.microLabel}>ACCEPT IN-PERSON APPOINTMENTS</Text>
+                                        <Text style={{ fontSize: 12, color: doctorColors.textMuted, marginTop: 4 }}>Enable this to allow patients to book clinic visits with you.</Text>
+                                    </View>
+                                    <Switch
+                                        value={availability.acceptsInPerson}
+                                        onValueChange={(val) => setAvailability((p) => ({ ...p, acceptsInPerson: val }))}
+                                        trackColor={{ false: '#E2E8F0', true: doctorColors.primary + '80' }}
+                                        thumbColor={availability.acceptsInPerson ? doctorColors.primary : '#FFFFFF'}
+                                    />
+                                </View>
+                            </View>
+
+                            <View style={[!availability.acceptsInPerson && { opacity: 0.5 }]} pointerEvents={availability.acceptsInPerson ? 'auto' : 'none'}>
+                                <Text style={[styles.microLabel, { marginBottom: spacing.sm }]}>IN-PERSON SCHEDULE</Text>
+                                {DAYS.map((day) => (
+                                    <DayCard
+                                        key={day}
+                                        day={day}
+                                        sched={availability.inPersonSchedule[day]}
+                                        onToggle={() => toggleDay(day, 'inPersonSchedule')}
+                                        onUpdateInterval={(idx, field, val) => updateIntervalField(day, idx, field, val, 'inPersonSchedule')}
+                                        onAddInterval={() => addInterval(day, 'inPersonSchedule')}
+                                        onRemoveInterval={(idx) => removeInterval(day, idx, 'inPersonSchedule')}
+                                    />
+                                ))}
+                            </View>
+
+                            <View style={styles.navRow}>
+                                <Pressable style={styles.backNavButton} onPress={goBack}>
+                                    <Feather name="arrow-left" size={18} color={doctorColors.primary} />
+                                    <Text style={styles.backNavText}>Back</Text>
+                                </Pressable>
+                                <Pressable style={styles.nextButton} onPress={goNext}>
+                                    <Text style={styles.nextButtonText}>Continue</Text>
+                                    <Feather name="arrow-right" size={18} color="#FFFFFF" />
+                                </Pressable>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* ── Step 4: Payments & Consent ───────────────── */}
+                    {currentStep === 3 && (
                         <View style={styles.stepContent}>
                             <View style={styles.stepHeader}>
                                 <View style={styles.stepIconCircle}>
@@ -1201,56 +1490,6 @@ const styles = StyleSheet.create({
         fontFamily: typography.fontFamily.regular,
         ...typography.size.base,
         color: doctorColors.textPrimary,
-    },
-
-    // Schedule
-    scheduleList: {
-        gap: spacing.sm,
-    },
-    scheduleRow: {
-        borderWidth: 1,
-        borderColor: doctorColors.border,
-        borderRadius: radii.md,
-        backgroundColor: doctorColors.surface,
-        padding: spacing.md,
-        gap: spacing.sm,
-    },
-    scheduleDayRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: spacing.md,
-    },
-    dayName: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.base,
-        color: doctorColors.textPrimary,
-    },
-    dayNameDisabled: {
-        color: doctorColors.textMuted,
-    },
-    timeRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: spacing.sm,
-        marginLeft: spacing['4xl'],
-    },
-    timeButton: {
-        borderWidth: 1,
-        borderColor: doctorColors.border,
-        borderRadius: radii.sm,
-        paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.sm,
-        backgroundColor: doctorColors.background,
-    },
-    timeText: {
-        fontFamily: typography.fontFamily.medium,
-        ...typography.size.sm,
-        color: doctorColors.primary,
-    },
-    timeSeparator: {
-        fontFamily: typography.fontFamily.regular,
-        ...typography.size.sm,
-        color: doctorColors.textMuted,
     },
 
     // Consent

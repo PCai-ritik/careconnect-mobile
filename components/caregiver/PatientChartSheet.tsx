@@ -14,14 +14,12 @@ import {
     Text,
     TextInput,
     Pressable,
-    ScrollView,
-    Modal,
     ActivityIndicator,
     StyleSheet,
     Dimensions,
-    KeyboardAvoidingView,
-    Platform,
 } from 'react-native';
+import { ScrollView } from 'react-native';
+import { ThemedBottomSheet } from '@/components/shared/ThemedBottomSheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import {
@@ -123,49 +121,41 @@ export default function PatientChartSheet({ visible, patient, onClose, onSave }:
         : null;
 
     return (
-        <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
-            <Pressable style={styles.backdrop} onPress={onClose}><View /></Pressable>
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                style={[styles.sheet, { paddingBottom: insets.bottom }]}
-            >
-                <View style={styles.handleBar} />
-
-                {/* Header */}
-                <View style={styles.header}>
-                    <View style={styles.avatarCircle}>
-                        <Text style={styles.avatarText}>
-                            {patient.full_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                        </Text>
-                    </View>
-                    <View style={styles.headerInfo}>
-                        <Text style={styles.headerName}>{patient.full_name}</Text>
-                        <Text style={styles.headerMeta}>
-                            {age ? `${age} years` : ''}{age && patient.gender ? ' • ' : ''}{patient.gender ?? ''}
-                        </Text>
-                    </View>
-                    <Pressable
-                        onPress={() => editing ? handleSave() : setEditing(true)}
-                        style={[styles.editBtn, editing && styles.editBtnActive]}
-                    >
-                        {saving ? (
-                            <ActivityIndicator size="small" color="#FFFFFF" />
-                        ) : (
-                            <>
-                                <Feather name={editing ? 'check' : 'edit-2'} size={16} color={editing ? '#FFFFFF' : patientColors.primary} />
-                                <Text style={[styles.editBtnText, editing && styles.editBtnTextActive]}>
-                                    {editing ? 'Save' : 'Edit'}
-                                </Text>
-                            </>
-                        )}
-                    </Pressable>
+        <ThemedBottomSheet visible={visible} onClose={onClose}>
+            <View style={styles.header}>
+                <View style={styles.avatarCircle}>
+                    <Text style={styles.avatarText}>
+                        {patient.full_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                    </Text>
                 </View>
-
-                <ScrollView
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
+                <View style={styles.headerInfo}>
+                    <Text style={styles.headerName}>{patient.full_name}</Text>
+                    <Text style={styles.headerMeta}>
+                        {age ? `${age} years` : ''}{age && patient.gender ? ' • ' : ''}{patient.gender ?? ''}
+                    </Text>
+                </View>
+                <Pressable
+                    onPress={() => editing ? handleSave() : setEditing(true)}
+                    style={[styles.editBtn, editing && styles.editBtnActive]}
                 >
+                    {saving ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                        <>
+                            <Feather name={editing ? 'check' : 'edit-2'} size={16} color={editing ? '#FFFFFF' : patientColors.primary} />
+                            <Text style={[styles.editBtnText, editing && styles.editBtnTextActive]}>
+                                {editing ? 'Save' : 'Edit'}
+                            </Text>
+                        </>
+                    )}
+                </Pressable>
+            </View>
+
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+            >
                     {/* Quick stats */}
                     <View style={styles.statsRow}>
                         <StatPill icon="droplet" label="Blood" value={patient.blood_group ?? '—'} color="#EF4444" />
@@ -241,8 +231,7 @@ export default function PatientChartSheet({ visible, patient, onClose, onSave }:
 
                     <View style={{ height: spacing['3xl'] }} />
                 </ScrollView>
-            </KeyboardAvoidingView>
-        </Modal>
+        </ThemedBottomSheet>
     );
 }
 
@@ -302,19 +291,6 @@ function EditField({
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-    sheet: {
-        position: 'absolute', bottom: 0, left: 0, right: 0,
-        height: SHEET_HEIGHT, backgroundColor: patientColors.surface,
-        borderTopLeftRadius: 24, borderTopRightRadius: 24,
-        ...shadows.elevated,
-    },
-    handleBar: {
-        width: 40, height: 4, borderRadius: 2,
-        backgroundColor: patientColors.border, alignSelf: 'center',
-        marginTop: spacing.sm,
-    },
-
     // Header
     header: {
         flexDirection: 'row', alignItems: 'center',

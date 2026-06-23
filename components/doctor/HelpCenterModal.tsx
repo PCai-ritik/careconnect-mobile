@@ -2,33 +2,22 @@
  * CareConnect — Help Center Modal (Doctor)
  *
  * 85%-height Bottom Sheet with FAQ search, expandable FAQ cards,
- * and a Contact Support footer. Uses doctorColors + StyleSheet.create().
+ * and a Contact Support footer. Fully multi-tenant via useTheme().
  */
 
 import { useState } from 'react';
 import {
     View,
     Text,
-    Modal,
     Pressable,
     ScrollView,
     TextInput,
     StyleSheet,
-    Dimensions,
-    Animated,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import useSwipeDown from '@/hooks/useSwipeDown';
+import { ThemedBottomSheet } from '@/components/shared/ThemedBottomSheet';
 import { Feather } from '@expo/vector-icons';
-import {
-    spacing,
-    doctorColors,
-    typography,
-    shadows,
-    radii,
-} from '@/constants/theme';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+import { spacing, shadows, radii, typography } from '@/constants/theme';
+import { useTheme } from '@/providers/ThemeProvider';
 
 interface HelpCenterModalProps {
     visible: boolean;
@@ -57,8 +46,7 @@ const faqs = [
 ];
 
 export default function HelpCenterModal({ visible, onClose }: HelpCenterModalProps) {
-    const insets = useSafeAreaInsets();
-    const { panHandlers, animatedStyle } = useSwipeDown(onClose);
+    const { colors } = useTheme();
     const [search, setSearch] = useState('');
 
     const filtered = faqs.filter(
@@ -68,96 +56,70 @@ export default function HelpCenterModal({ visible, onClose }: HelpCenterModalPro
     );
 
     return (
-        <Modal
-            animationType="slide"
-            transparent
-            visible={visible}
-            onRequestClose={onClose}
-        >
-            <Pressable style={s.backdrop} onPress={onClose} />
+        <ThemedBottomSheet visible={visible} onClose={onClose}>
+            {/* Header */}
+            <View style={s.header}>
+                <Text style={[s.headerTitle, { color: colors.textPrimary }]}>Help Center</Text>
+            </View>
 
-            <Animated.View style={[s.sheet, animatedStyle, { paddingBottom: insets.bottom }]}>
-                <View style={s.handleRow} {...panHandlers}>
-                    <View style={s.handle} />
-                </View>
-
-                {/* Header */}
-                <View style={s.header}>
-                    <Text style={s.headerTitle}>Help Center</Text>
-                </View>
-
-                {/* Search */}
-                <View style={s.searchBar}>
-                    <Feather name="search" size={18} color={doctorColors.textMuted} />
-                    <TextInput
-                        style={s.searchInput}
-                        placeholder="Search for help..."
-                        placeholderTextColor={doctorColors.textMuted}
-                        value={search}
-                        onChangeText={setSearch}
-                    />
-                    {search.length > 0 && (
-                        <Pressable onPress={() => setSearch('')} hitSlop={8}>
-                            <Feather name="x" size={16} color={doctorColors.textMuted} />
-                        </Pressable>
-                    )}
-                </View>
-
-                <ScrollView
-                    style={s.scrollArea}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={s.scrollInner}
-                >
-                    {filtered.map((faq) => (
-                        <View key={faq.id} style={s.faqCard}>
-                            <View style={s.faqHeader}>
-                                <Feather name="help-circle" size={16} color={doctorColors.primary} />
-                                <Text style={s.faqQuestion}>{faq.question}</Text>
-                            </View>
-                            <Text style={s.faqAnswer}>{faq.answer}</Text>
-                        </View>
-                    ))}
-
-                    {filtered.length === 0 && (
-                        <View style={s.emptyState}>
-                            <Feather name="search" size={36} color={doctorColors.textMuted} />
-                            <Text style={s.emptyText}>No results found</Text>
-                        </View>
-                    )}
-                </ScrollView>
-
-                {/* Footer */}
-                <View style={s.footer}>
-                    <Pressable
-                        style={({ pressed }) => [
-                            s.contactBtn,
-                            pressed && { opacity: 0.7 },
-                        ]}
-                    >
-                        <Feather name="mail" size={18} color={doctorColors.primary} />
-                        <Text style={s.contactBtnText}>Contact Support</Text>
+            {/* Search */}
+            <View style={[s.searchBar, { borderColor: colors.borderLight, backgroundColor: colors.surfaceMuted }]}>
+                <Feather name="search" size={18} color={colors.textMuted} />
+                <TextInput
+                    style={[s.searchInput, { color: colors.textPrimary }]}
+                    placeholder="Search for help..."
+                    placeholderTextColor={colors.textMuted}
+                    value={search}
+                    onChangeText={setSearch}
+                />
+                {search.length > 0 && (
+                    <Pressable onPress={() => setSearch('')} hitSlop={8}>
+                        <Feather name="x" size={16} color={colors.textMuted} />
                     </Pressable>
-                </View>
-            </Animated.View>
-        </Modal>
+                )}
+            </View>
+
+            <ScrollView
+                style={s.scrollArea}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={s.scrollInner}
+            >
+                {filtered.map((faq) => (
+                    <View key={faq.id} style={[s.faqCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
+                        <View style={s.faqHeader}>
+                            <Feather name="help-circle" size={16} color={colors.primary} />
+                            <Text style={[s.faqQuestion, { color: colors.textPrimary }]}>{faq.question}</Text>
+                        </View>
+                        <Text style={[s.faqAnswer, { color: colors.textMuted }]}>{faq.answer}</Text>
+                    </View>
+                ))}
+
+                {filtered.length === 0 && (
+                    <View style={s.emptyState}>
+                        <Feather name="search" size={36} color={colors.textMuted} />
+                        <Text style={[s.emptyText, { color: colors.textMuted }]}>No results found</Text>
+                    </View>
+                )}
+            </ScrollView>
+
+            {/* Footer */}
+            <View style={[s.footer, { borderTopColor: colors.borderLight }]}>
+                <Pressable
+                    style={({ pressed }) => [
+                        s.contactBtn,
+                        { borderColor: colors.border },
+                        pressed && { opacity: 0.7 },
+                    ]}
+                >
+                    <Feather name="mail" size={18} color={colors.primary} />
+                    <Text style={[s.contactBtnText, { color: colors.primary }]}>Contact Support</Text>
+                </Pressable>
+            </View>
+        </ThemedBottomSheet>
     );
 }
 
 const s = StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-    sheet: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: SCREEN_HEIGHT * 0.85,
-        backgroundColor: doctorColors.surface,
-        borderTopLeftRadius: radii.xl,
-        borderTopRightRadius: radii.xl,
-        ...shadows.elevated,
-    },
-    handleRow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
-    handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: doctorColors.border },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -168,9 +130,7 @@ const s = StyleSheet.create({
     headerTitle: {
         fontFamily: typography.fontFamily.bold,
         ...typography.size.xl,
-        color: doctorColors.textPrimary,
     },
-
 
     searchBar: {
         flexDirection: 'row',
@@ -181,15 +141,12 @@ const s = StyleSheet.create({
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.md,
         borderWidth: 1,
-        borderColor: '#E2E8F0',
         borderRadius: radii.md,
-        backgroundColor: '#F8FAFC',
     },
     searchInput: {
         flex: 1,
         fontFamily: typography.fontFamily.regular,
         ...typography.size.sm,
-        color: doctorColors.textPrimary,
         padding: 0,
     },
 
@@ -197,9 +154,7 @@ const s = StyleSheet.create({
     scrollInner: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
 
     faqCard: {
-        backgroundColor: doctorColors.surface,
         borderWidth: 1,
-        borderColor: doctorColors.borderLight,
         borderRadius: radii.lg,
         padding: spacing.lg,
         marginBottom: spacing.md,
@@ -215,12 +170,10 @@ const s = StyleSheet.create({
         flex: 1,
         fontFamily: typography.fontFamily.semiBold,
         ...typography.size.base,
-        color: doctorColors.textPrimary,
     },
     faqAnswer: {
         fontFamily: typography.fontFamily.regular,
         ...typography.size.sm,
-        color: doctorColors.textMuted,
         lineHeight: 20,
         paddingLeft: spacing.xl + spacing.sm,
     },
@@ -233,14 +186,12 @@ const s = StyleSheet.create({
     emptyText: {
         fontFamily: typography.fontFamily.regular,
         ...typography.size.base,
-        color: doctorColors.textMuted,
     },
 
     footer: {
         paddingHorizontal: spacing.xl,
         paddingVertical: spacing.lg,
         borderTopWidth: 1,
-        borderTopColor: doctorColors.borderLight,
     },
     contactBtn: {
         flexDirection: 'row',
@@ -250,11 +201,9 @@ const s = StyleSheet.create({
         paddingVertical: spacing.lg,
         borderRadius: radii.md,
         borderWidth: 1,
-        borderColor: doctorColors.border,
     },
     contactBtnText: {
         fontFamily: typography.fontFamily.medium,
         ...typography.size.base,
-        color: doctorColors.primary,
     },
 });
